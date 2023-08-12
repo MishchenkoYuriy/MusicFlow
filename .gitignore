@@ -1,3 +1,7 @@
+reproduce.md
+reproduce_core.md
+dags/bigquery.py
+
 # airflow
 config/
 logs/
@@ -155,3 +159,4 @@ dmypy.json
 *.parquet
 *.csv
 *.json
+*.pickle

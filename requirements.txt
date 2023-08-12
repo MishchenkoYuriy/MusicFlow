@@ -5,6 +5,10 @@ requests
 google-api-python-client
 google-auth
 google-auth-oauthlib
+apache-airflow[google]
+google-cloud
+google-cloud-bigquery
+google-cloud-storage
 
 # google-api-python-client==1.7.2
 # google-auth==1.8.0
