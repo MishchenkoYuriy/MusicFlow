@@ -43,7 +43,7 @@ def extract_df_videos() -> pd.DataFrame:
     client = bigquery.Client(project=project_id)
 
     sql = f"""
-    SELECT p.playlist_name, v.channel_name, v.title, v.duration_ms
+    SELECT p.playlist_name, v.channel_name, v.title, v.description, v.duration_ms
     FROM `{project_id}.marts.youtube_videos` v
     INNER JOIN `{project_id}.marts.youtube_playlists` p
     ON v.youtube_playlist_id = p.youtube_playlist_id

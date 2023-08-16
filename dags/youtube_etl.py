@@ -112,7 +112,8 @@ def populate_videos(response, playlist_id: str) -> None:
     for item in response['items']:
         # Remove deleted, private and duplicate videos
         if item['snippet']['title'] not in ('Deleted video', 'Private video') and item['contentDetails']['videoId'] not in videos:
-            videos[item['contentDetails']['videoId']] = [playlist_id, item['snippet']['title'], item['snippet']['videoOwnerChannelTitle']]
+            videos[item['contentDetails']['videoId']] = \
+            [playlist_id, item['snippet']['title'], item['snippet']['videoOwnerChannelTitle'], item['snippet']['description']]
 
 
 def extract_all_videos(youtube, playlists: dict[str, str]) -> None:
@@ -179,7 +180,8 @@ def transform_videos_to_df() -> pd.DataFrame:
     Return a videos dataframe from a videos dict[str, list[str]] object.
     """
     df_videos = pd.DataFrame.from_dict(videos, orient='index',
-                                       columns=['youtube_playlist_id', 'title', 'channel_name', 'duration_ms']).reset_index(names='video_id')
+                                       columns=['youtube_playlist_id', 'title', 'channel_name', 'description', 'duration_ms']) \
+                                       .reset_index(names='video_id')
     return df_videos
 
 
