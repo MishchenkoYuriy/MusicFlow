@@ -28,7 +28,10 @@ def extract_df_playlists() -> pd.DataFrame:
     client = bigquery.Client(project=project_id)
 
     sql = f"""
-    SELECT youtube_playlist_id, playlist_name
+    SELECT
+        youtube_playlist_id,
+        playlist_name
+    
     FROM `{project_id}.marts.youtube_playlists`
     ORDER BY playlist_name
     """
@@ -43,10 +46,18 @@ def extract_df_videos() -> pd.DataFrame:
     client = bigquery.Client(project=project_id)
 
     sql = f"""
-    SELECT p.playlist_name, v.channel_name, v.title, v.description, v.duration_ms
+    SELECT
+        p.playlist_name,
+        v.channel_name,
+        v.title,
+        lower(v.description) description,
+        v.duration_ms
+    
     FROM `{project_id}.marts.youtube_videos` v
+
     INNER JOIN `{project_id}.marts.youtube_playlists` p
     ON v.youtube_playlist_id = p.youtube_playlist_id
+
     WHERE v.duration_ms >= {breakpoint_ms}
     ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
     """
@@ -137,20 +148,28 @@ def search_spotify_album(row) -> tuple[str, list]:
     albums = sp.search(q=row['title'], limit=10, type='album')
 
     for album_num, album in enumerate(albums['albums']['items']):    
-        diff = row['duration_ms']
         tracks_uri = []
+        diff = row['duration_ms']
+        tracks_in_desc = 0
         # album_length = 0
         
         tracks = sp.album(album['uri'])
         for track in tracks['tracks']['items']:
+            if track['name'].lower() in row['description']: # case-insensitive match
+                tracks_in_desc += 1
+            
             tracks_uri.append(track['uri'])
             # album_length += track['duration_ms']
             diff -= track['duration_ms']
             if diff < -20000:
                 break
         
-        if abs(diff) < 20000: # difference in 20 seconds is fine
-            print(f'Album "{row["title"]}" found on try: {album_num}')
+        percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
+        if abs(diff) < 20000 or percent_in_desc >= 80: # difference in 20 seconds is fine or 80%+ tracks in YouTube video description
+            print(f'Album "{row["title"]}" found on try {album_num}, ' \
+                  f'difference: {round(diff / 1000)} seconds, '
+                  f'{tracks_in_desc} of {len(tracks_uri)} track titles ({round(percent_in_desc)}%) in the YouTube video description.')
+            
             return album['uri'], tracks_uri
     
     return None, None
@@ -173,7 +192,9 @@ def search_spotify_playlist(row) -> tuple[str, list]:
                 break
         
         if abs(diff) < 20000: # difference in 20 seconds is fine
-            print(f'Playlist "{row["title"]}" found on try: {playlist_num}')
+            print(f'Playlist "{row["title"]}" found on try {playlist_num}, ' \
+                  f'difference: {round(diff / 1000)} seconds.')
+            
             return playlist['uri'], tracks_uri
 
     return None, None
@@ -220,7 +241,7 @@ if __name__ == '__main__':
 
     # create and store playlists info
     df_playlists = create_spotify_playlists_from_df(df_playlists)
-    print(f'{len(df_playlists)} playlists was added.')
+    print(f'{len(df_playlists)} playlists were added.')
 
     load_to_bigquery(df_playlists[['spotify_playlist_id', 'playlist_name']], 'spotify_playlists')
     load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids')
