@@ -134,18 +134,20 @@ def search_spotify_track(q: str, track_duration_ms: int) -> tuple[str, int]:
 
 
 def get_spotify_tracks_uri_from_album_name(row) -> tuple[str, str]:
-    # priority: album -> playlist
-    album_uri, album_tracks_uri = search_spotify_album(row)
-    if album_uri:
-        return album_uri, album_tracks_uri
-    else:
-        # print('Album not found, trying to search for a playlist')
-        playlist_uri, playlist_tracks_uri = search_spotify_playlist(row)
-        return playlist_uri, playlist_tracks_uri
+    
+    # First try, just video title
+    album_uri, album_tracks_uri = search_spotify_album(row, q=row["title"], limit=2)
+
+    # Second try, album + space + album name in quotes
+    if not album_uri:
+        q = f'album "{row["title"]}"'
+        album_uri, album_tracks_uri = search_spotify_album(row, q=q, limit=2)
+    
+    return album_uri, album_tracks_uri
 
 
-def search_spotify_album(row) -> tuple[str, list]:
-    albums = sp.search(q=row['title'], limit=10, type='album')
+def search_spotify_album(row, q: str, limit: int) -> tuple[str, list]:
+    albums = sp.search(q=q, limit=limit, type='album')
 
     for album_num, album in enumerate(albums['albums']['items']):    
         tracks_uri = []
@@ -165,7 +167,9 @@ def search_spotify_album(row) -> tuple[str, list]:
                 break
         
         percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
-        if abs(diff) < 20000 or percent_in_desc >= 80: # difference in 20 seconds is fine or 80%+ tracks in YouTube video description
+        
+        # Difference in 40 seconds is fine or 70%+ tracks in YouTube video description (only if total number of tracks is objective)
+        if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
             print(f'Album "{row["title"]}" found on try {album_num}, ' \
                   f'difference: {round(diff / 1000)} seconds, '
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles ({round(percent_in_desc)}%) in the YouTube video description.')
@@ -175,43 +179,18 @@ def search_spotify_album(row) -> tuple[str, list]:
     return None, None
 
 
-def search_spotify_playlist(row) -> tuple[str, list]:
-    playlists = sp.search(q=row['title'], limit=10, type='playlist')
-
-    for playlist_num, playlist in enumerate(playlists['playlists']['items']):    
-        diff = row['duration_ms']
-        tracks_uri = []
-        # album_length = 0
-        
-        tracks = sp.playlist(playlist['uri']) #!
-        for track in tracks['tracks']['items']:
-            tracks_uri.append(track['track']['uri'])
-            # album_length += track['duration_ms']
-            diff -= track['track']['duration_ms']
-            if diff < -20000:
-                break
-        
-        if abs(diff) < 20000: # difference in 20 seconds is fine
-            print(f'Playlist "{row["title"]}" found on try {playlist_num}, ' \
-                  f'difference: {round(diff / 1000)} seconds.')
-            
-            return playlist['uri'], tracks_uri
-
-    return None, None
-
-
 def add_videos_to_playlists(row) -> None:
     spotify_playlist_id = get_spotify_playlist_id(row)
-
-    # ALBUM OR PLAYLIST
     breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
+
+    # ALBUM
     if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
         album_uri, tracks_uri = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             sp.playlist_add_items(spotify_playlist_id, tracks_uri) # add all album tracks to playlist
-            # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+            sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
         else:
-            print(f'Album "{row["title"]}" not found as a Spotify album or playlist')
+            print(f'Album "{row["title"]}" not found on Spotify')
     
     # TRACK
     else: # a YouTube video is probably a track
