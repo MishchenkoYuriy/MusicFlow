@@ -251,7 +251,7 @@ if __name__ == '__main__':
     # create the dataframe for Spotify albums and tracks and store it in BigQuery
     df_spotify_catalog = df_youtube_videos.apply(add_videos_to_playlists, axis = 1, result_type='expand')
     df_spotify_catalog.insert(1, 'youtube_video_id', df_youtube_videos['video_id'])
-    df_spotify_catalog = df_spotify_catalog.dropna()
+    df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
     
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog')
     print(f'spotify_catalog uploaded to BigQuery.')
