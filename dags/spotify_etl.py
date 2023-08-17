@@ -40,13 +40,14 @@ def extract_df_playlists() -> pd.DataFrame:
     return df_playlists
 
 
-def extract_df_videos() -> pd.DataFrame:
+def extract_df_youtube_videos() -> pd.DataFrame:
     project_id = os.getenv('PROJECT_ID')
     breakpoint_ms = os.getenv('BREAKPOINT_MS')
     client = bigquery.Client(project=project_id)
 
     sql = f"""
     SELECT
+        v.video_id,
         p.playlist_name,
         v.channel_name,
         v.title,
@@ -62,8 +63,8 @@ def extract_df_videos() -> pd.DataFrame:
     ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
     """
 
-    df_videos = client.query(sql).to_dataframe()
-    return df_videos
+    df_youtube_videos = client.query(sql).to_dataframe()
+    return df_youtube_videos
 
 
 def get_authorization_code():
@@ -77,18 +78,13 @@ def get_current_user_id() -> str:
     return user_info['id']
 
 
-def create_playlist_from_df_row(row):
-    playlist_info = sp.user_playlist_create(user_id, row['playlist_name'], public=False, collaborative=False)
-    return playlist_info['id']
-
-
-def create_spotify_playlists_from_df(df_playlists: pd.DataFrame) -> pd.DataFrame:
+def create_spotify_playlists_from_df(row) -> str:
     """
     Create private, non-collaborative Spotify playlists from the dataframe.
     Save created playlist ids as a column in the original dataframe.
     """
-    df_playlists['spotify_playlist_id'] = df_playlists.apply(create_playlist_from_df_row, axis = 1)
-    return df_playlists
+    playlist = sp.user_playlist_create(user_id, row['playlist_name'], public=False, collaborative=False)
+    return playlist['id']
 
 
 def get_spotify_playlist_id(row) -> str:
@@ -136,24 +132,24 @@ def search_spotify_track(q: str, track_duration_ms: int) -> tuple[str, int]:
 def get_spotify_tracks_uri_from_album_name(row) -> tuple[str, str]:
     
     # First try, just video title
-    album_uri, album_tracks_uri = search_spotify_album(row, q=row["title"], limit=2)
+    album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=row["title"], limit=2)
 
     # Second try, album + space + album name in quotes
     if not album_uri:
         q = f'album "{row["title"]}"'
-        album_uri, album_tracks_uri = search_spotify_album(row, q=q, limit=2)
+        album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=q, limit=2)
     
-    return album_uri, album_tracks_uri
+    return album_uri, album_tracks_uri, album_info
 
 
-def search_spotify_album(row, q: str, limit: int) -> tuple[str, list]:
+def search_spotify_album(row, q: str, limit: int) -> tuple[str, list, dict]:
     albums = sp.search(q=q, limit=limit, type='album')
 
     for album_num, album in enumerate(albums['albums']['items']):    
         tracks_uri = []
         diff = row['duration_ms']
         tracks_in_desc = 0
-        # album_length = 0
+        album_length = 0
         
         tracks = sp.album(album['uri'])
         for track in tracks['tracks']['items']:
@@ -161,42 +157,58 @@ def search_spotify_album(row, q: str, limit: int) -> tuple[str, list]:
                 tracks_in_desc += 1
             
             tracks_uri.append(track['uri'])
-            # album_length += track['duration_ms']
+            album_length += track['duration_ms']
             diff -= track['duration_ms']
             if diff < -20000:
                 break
         
         percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
         
-        # Difference in 40 seconds is fine or 70%+ tracks in YouTube video description (only if total number of tracks is objective)
+        # Difference in 40 seconds or 70%+ tracks in the YouTube video description (only if the total number of tracks is objective) are fine
         if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
             print(f'Album "{row["title"]}" found on try {album_num}, ' \
                   f'difference: {round(diff / 1000)} seconds, '
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles ({round(percent_in_desc)}%) in the YouTube video description.')
-            
-            return album['uri'], tracks_uri
+
+            return album['uri'], tracks_uri, dict({'title': album['name'],
+                                                   'artist': album['artists'][0]['name'],
+                                                   'duration_ms': str(album_length),
+                                                   'found_on_try': str(album_num),
+                                                   'difference_ms': str(abs(diff)),
+                                                   'tracks_in_desc': str(tracks_in_desc),
+                                                   'total_tracks': str(len(tracks_uri))})
     
-    return None, None
+    return None, None, None
 
 
-def add_videos_to_playlists(row) -> None:
+def add_videos_to_playlists(row) -> dict:
     spotify_playlist_id = get_spotify_playlist_id(row)
     breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
+    spotify_uri, category = None, None
 
     # ALBUM
     if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
-        album_uri, tracks_uri = get_spotify_tracks_uri_from_album_name(row)
+        album_uri, tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
+            spotify_uri, category = album_uri, '0'
             sp.playlist_add_items(spotify_playlist_id, tracks_uri) # add all album tracks to playlist
-            sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+            # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
         else:
             print(f'Album "{row["title"]}" not found on Spotify')
     
     # TRACK
     else: # a YouTube video is probably a track
         track_uri = get_spotify_track_uri(row)
+        spotify_uri, category = track_uri, '1'
         # print(spotify_playlist_id, track_uri)
         sp.playlist_add_items(spotify_playlist_id, [track_uri])
+    
+
+    if album_info:
+        return dict(dict({'spotify_uri': spotify_uri,
+                        'spotify_playlist_id': spotify_playlist_id,
+                        'category': category}),
+                        **album_info)
 
 
 # def add_to_saved_tracks(track_id: str) -> None:
@@ -211,7 +223,7 @@ def add_videos_to_playlists(row) -> None:
 if __name__ == '__main__':
     # extract dataframes from BigQuery
     df_playlists = extract_df_playlists()
-    df_videos = extract_df_videos()
+    df_youtube_videos = extract_df_youtube_videos()
     print(f'Datasets were extracted from BigQuery.')
     
     # authorisation
@@ -219,15 +231,22 @@ if __name__ == '__main__':
     user_id = get_current_user_id()
 
     # create and store playlists info
-    df_playlists = create_spotify_playlists_from_df(df_playlists)
+    df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
     print(f'{len(df_playlists)} playlists were added.')
 
     load_to_bigquery(df_playlists[['spotify_playlist_id', 'playlist_name']], 'spotify_playlists')
+    print(f'spotify_playlists uploaded to BigQuery.')
     load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids')
-    print(f'Datasets were loaded to BigQuery.')
+    print(f'playlists_ids uploaded to BigQuery.')
 
-    # df_test = df_videos[df_videos['playlist_name'] == os.getenv('PLAYLIST_NAME')]
-    df_videos.apply(add_videos_to_playlists, axis = 1)
+    # create and store albums and tracks info
+    # df_test = df_youtube_videos[df_youtube_videos['playlist_name'] == os.getenv('PLAYLIST_NAME')]
+    df_spotify_catalog = df_youtube_videos.apply(add_videos_to_playlists, axis = 1, result_type='expand')
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_youtube_videos['video_id'])
+    df_spotify_catalog = df_spotify_catalog.dropna()
+    
+    load_to_bigquery(df_spotify_catalog, 'spotify_catalog')
+    print(f'spotify_catalog uploaded to BigQuery.')
 
     #df.apply(load_to_spotify, axis = 1)
 
