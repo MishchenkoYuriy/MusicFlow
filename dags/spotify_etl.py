@@ -1,5 +1,5 @@
 import os
-import math
+import re
 import pandas as pd
 from dotenv import load_dotenv
 import logging
@@ -42,6 +42,7 @@ def extract_df_playlists() -> pd.DataFrame:
 
 def extract_df_youtube_videos() -> pd.DataFrame:
     project_id = os.getenv('PROJECT_ID')
+    # playlist_name = os.getenv('PLAYLIST_NAME')
     breakpoint_ms = os.getenv('BREAKPOINT_MS')
     client = bigquery.Client(project=project_id)
 
@@ -59,7 +60,7 @@ def extract_df_youtube_videos() -> pd.DataFrame:
     INNER JOIN `{project_id}.marts.youtube_playlists` p
     ON v.youtube_playlist_id = p.youtube_playlist_id
 
-    WHERE v.duration_ms >= {breakpoint_ms}
+    WHERE v.duration_ms < {breakpoint_ms}
     ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
     """
 
@@ -97,39 +98,40 @@ def get_spotify_playlist_id(row) -> str:
     return playlist.iloc[0, 2]
 
 
-def get_spotify_track_uri(row) -> str:
-    min_diff2 = math.inf
-    track_uri, min_diff = search_spotify_track(row['title'], row['duration_ms'])
-
-    if min_diff > 5000: # abs grater than 5 seconds
-        print(f'WARNING: Track {row["title"]} not found by title, tring to add channel_name to search')
-        track_uri2, min_diff2 = search_spotify_track(f'{row["channel_name"]} {row["title"]}', row['duration_ms'])
+def get_spotify_track_uri(row) -> tuple[str, dict]:
     
-    return track_uri if min_diff < min_diff2 else track_uri2
+    # First try, just video title
+    track_uri, track_info = search_spotify_track(row, q=row['title'], limit=2)
+
+    # Second try, channel name + space + track title
+    if not track_uri:
+        artist = re.sub(' - Topic', '', row['channel_name'])
+        q = f'{artist} {row["title"]}'
+        track_uri, track_info = search_spotify_track(row, q=q, limit=2)
+    
+    return track_uri, track_info
 
 
-def search_spotify_track(q: str, track_duration_ms: int) -> tuple[str, int]:
-    results = sp.search(q=q, limit=15, type='track')
-    tracks = results['tracks']['items']
+def search_spotify_track(row, q: str, limit: int) -> tuple[str, dict]:
+    tracks = sp.search(q=q, limit=limit, type='track')
 
-    min_diff_track_num = 0
-    min_diff = math.inf
-
-    for track_num, track in enumerate(tracks):
-        diff = abs(track['duration_ms'] - track_duration_ms)
+    for track_num, track in enumerate(tracks['tracks']['items']):
+        diff = abs(track['duration_ms'] - row['duration_ms'])
 
         if diff <= 5000: # difference in 5 seconds is fine
-            print(f'Track found on try: {track_num}')
-            return track['uri'], diff
-        
-        if diff < min_diff:
-            min_diff = diff
-            min_diff_track_num = track_num
+            print(f'Track "{row["title"]}" found on try: {track_num}, ' \
+                  f'difference: {round(diff / 1000)} seconds. ')
+            
+            return track['uri'], dict({'title': track['name'],
+                                       'artist': track['artists'][0]['name'],
+                                       'duration_ms': str(track['duration_ms']),
+                                       'found_on_try': str(track_num),
+                                       'difference_ms': str(abs(diff))})
     
-    return tracks[min_diff_track_num]['uri'], min_diff
+    return None, None
 
 
-def get_spotify_tracks_uri_from_album_name(row) -> tuple[str, str]:
+def get_spotify_tracks_uri_from_album_name(row) -> tuple[str, list, dict]:
     
     # First try, just video title
     album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=row["title"], limit=2)
@@ -182,42 +184,49 @@ def search_spotify_album(row, q: str, limit: int) -> tuple[str, list, dict]:
 
 
 def add_videos_to_playlists(row) -> dict:
+    """
+    Find albums and videos on Spotify and add them to created playlists.
+
+    Return:
+        dict: a skeleton for df_spotify_catalog dataframe.
+        If the first video is not found and add_videos_to_playlists returns None, df_spotify_catalog will be a Series.
+    """
     spotify_playlist_id = get_spotify_playlist_id(row)
     breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
-    spotify_uri, category = None, None
+    album_info, track_info = None, None
 
     # ALBUM
     if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
-        album_uri, tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
+        album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
-            spotify_uri, category = album_uri, '0'
-            sp.playlist_add_items(spotify_playlist_id, tracks_uri) # add all album tracks to playlist
+            sp.playlist_add_items(spotify_playlist_id, album_tracks_uri) # add all album tracks to playlist
             # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+
+            return dict(dict({'spotify_uri': album_uri,
+                              'spotify_playlist_id': spotify_playlist_id,
+                              'category': '0'}),
+                              **album_info)
         else:
             print(f'Album "{row["title"]}" not found on Spotify')
     
     # TRACK
     else: # a YouTube video is probably a track
-        track_uri = get_spotify_track_uri(row)
-        spotify_uri, category = track_uri, '1'
-        # print(spotify_playlist_id, track_uri)
-        sp.playlist_add_items(spotify_playlist_id, [track_uri])
-    
+        track_uri, track_info = get_spotify_track_uri(row)
+        if track_uri:
+            sp.playlist_add_items(spotify_playlist_id, [track_uri]) # add all tracks to playlist
 
-    if album_info:
-        return dict(dict({'spotify_uri': spotify_uri,
-                        'spotify_playlist_id': spotify_playlist_id,
-                        'category': category}),
-                        **album_info)
+            return dict(dict({'spotify_uri': track_uri,
+                              'spotify_playlist_id': spotify_playlist_id,
+                              'category': '1'}),
+                              **track_info)
+        else:
+            print(f'Track "{row["title"]}" not found on Spotify')
+    
+    return dict()
 
 
 # def add_to_saved_tracks(track_id: str) -> None:
 #     sp.current_user_saved_tracks_add(tracks=[track_id])
-
-
-# def load_to_spotify(row) -> None:
-#     item_id = find_spotify_id(row)
-#     add_to_saved_tracks(item_id)
 
 
 if __name__ == '__main__':
@@ -230,7 +239,7 @@ if __name__ == '__main__':
     sp = get_authorization_code()
     user_id = get_current_user_id()
 
-    # create and store playlists info
+    # create the dataframe from Spotify playlists and store it in BigQuery
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
     print(f'{len(df_playlists)} playlists were added.')
 
@@ -239,8 +248,7 @@ if __name__ == '__main__':
     load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids')
     print(f'playlists_ids uploaded to BigQuery.')
 
-    # create and store albums and tracks info
-    # df_test = df_youtube_videos[df_youtube_videos['playlist_name'] == os.getenv('PLAYLIST_NAME')]
+    # create the dataframe for Spotify albums and tracks and store it in BigQuery
     df_spotify_catalog = df_youtube_videos.apply(add_videos_to_playlists, axis = 1, result_type='expand')
     df_spotify_catalog.insert(1, 'youtube_video_id', df_youtube_videos['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna()
