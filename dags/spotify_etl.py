@@ -130,14 +130,24 @@ def search_spotify_track(row, q: str, search_type_id: str, limit: int) -> tuple[
     tracks = sp.search(q=q, limit=limit, type='track')
 
     for track_num, track in enumerate(tracks['tracks']['items']):
+        artists, artists_in_title, track_in_title = [], 0, 0
         diff = abs(track['duration_ms'] - row['duration_ms'])
 
-        if diff <= 5000: # difference in 5 seconds is fine
+        for artist in track['artists']:
+            artists.append(artist['name'])
+            if artist['name'].lower() in row["title"].lower(): # case-insensitive match
+                artists_in_title += 1
+        
+        if track['name'].lower() in row["title"].lower():
+            track_in_title = 1
+
+        # Difference in 5 seconds or both track name and at least one artist presented in video title
+        if diff <= 5000 or (track_in_title and artists_in_title):
             print(f'Track "{row["title"]}" found on try: {track_num}, ' \
                   f'difference: {round(diff / 1000)} seconds. ')
             
             return track['uri'], dict({'title': track['name'],
-                                       'artists': '; '.join(artist['name'] for artist in track['artists']),
+                                       'artists': '; '.join(artists),
                                        'duration_ms': str(track['duration_ms']),
                                        'found_on_try': str(track_num),
                                        'difference_ms': str(abs(diff)),
@@ -182,7 +192,7 @@ def search_spotify_album(row, q: str, search_type_id: str, limit: int) -> tuple[
         
         percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
         
-        # Difference in 40 seconds or 70%+ tracks in the YouTube video description (only if the total number of tracks is objective) are fine
+        # Difference in 40 seconds or 70%+ tracks in the YouTube video description (only if the total number of tracks is objective)
         if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
             print(f'Album "{row["title"]}" found on try {album_num}, ' \
                   f'difference: {round(diff / 1000)} seconds, '
