@@ -137,7 +137,7 @@ def search_spotify_track(row, q: str, search_type_id: str, limit: int) -> tuple[
                   f'difference: {round(diff / 1000)} seconds. ')
             
             return track['uri'], dict({'title': track['name'],
-                                       'artist': track['artists'][0]['name'],
+                                       'artists': '; '.join(artist['name'] for artist in track['artists']),
                                        'duration_ms': str(track['duration_ms']),
                                        'found_on_try': str(track_num),
                                        'difference_ms': str(abs(diff)),
@@ -189,7 +189,7 @@ def search_spotify_album(row, q: str, search_type_id: str, limit: int) -> tuple[
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles ({round(percent_in_desc)}%) in the YouTube video description.')
 
             return album['uri'], tracks_uri, dict({'title': album['name'],
-                                                   'artist': album['artists'][0]['name'],
+                                                   'artists': '; '.join(artist['name'] for artist in album['artists']),
                                                    'duration_ms': str(album_length),
                                                    'found_on_try': str(album_num),
                                                    'difference_ms': str(abs(diff)),
