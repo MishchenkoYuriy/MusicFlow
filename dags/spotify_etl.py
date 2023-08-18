@@ -274,22 +274,57 @@ def populate_playlists(row) -> dict:
     return dict()
 
 
-# def add_to_saved_tracks(track_id: str) -> None:
-#     sp.current_user_saved_tracks_add(tracks=[track_id])
+def populate_liked_songs(row) -> dict:
+    """
+    Find albums and tracks on Spotify and like them.
+
+    Return:
+        dict: a skeleton for df_spotify_catalog dataframe.
+        If the first video is not found and populate_liked_songs returns None,
+        df_spotify_catalog will be a Series.
+    """
+    breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
+
+    # ALBUM
+    if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
+        album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
+        if album_uri:
+            sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
+            # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+
+            return dict(dict({'spotify_uri': album_uri,
+                              'category': '0'}),
+                              **album_info)
+        else:
+            print(f'Album "{row["title"]}" not found on Spotify')
+    
+    # TRACK
+    else: # a YouTube video is probably a track
+        track_uri, track_info = get_spotify_track_uri(row)
+        if track_uri:
+            sp.current_user_saved_tracks_add([track_uri]) # like all tracks
+
+            return dict(dict({'spotify_uri': track_uri,
+                              'category': '1'}),
+                              **track_info)
+        else:
+            print(f'Track "{row["title"]}" not found on Spotify')
+    
+    return dict()
 
 
 if __name__ == '__main__':
-    # extract dataframes from BigQuery
+    # Extract dataframes from BigQuery.
     df_playlists = extract_df_playlists()
     df_playlist_items = extract_df_playlist_items()
     df_liked_videos = extract_df_liked_videos()
     print(f'Datasets were extracted from BigQuery.')
-    
-    # authorisation
+
+    # Authorisation
     sp = get_authorization_code()
     user_id = get_current_user_id()
 
-    # create the dataframe from Spotify playlists and store it in BigQuery
+    # Create Spotify playlists and store ids in BigQuery.
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
     print(f'{len(df_playlists)} playlists were added.')
 
@@ -298,15 +333,23 @@ if __name__ == '__main__':
     load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids', 'replace')
     print(f'playlists_ids uploaded to BigQuery.')
 
-    # create the dataframe for Spotify albums and tracks and store it in BigQuery
+    # Save Spotify albums and tracks in created playlists and store info in BigQuery.
     df_spotify_catalog = df_playlist_items.apply(populate_playlists, axis = 1, result_type='expand')
     df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
-    
-    load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'replace')
-    print(f'spotify_catalog uploaded to BigQuery.')
 
-    # create and upload search types
+    load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'replace')
+    print(f'spotify_catalog for playlist_items uploaded to BigQuery, {len(df_spotify_catalog)} rows.')
+
+    # Like Spotify tracks and store info in BigQuery.
+    df_spotify_catalog = df_liked_videos.apply(populate_liked_songs, axis = 1, result_type='expand')
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
+    df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
+
+    load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'append')
+    print(f'spotify_catalog for liked_videos uploaded to BigQuery, {len(df_spotify_catalog)} rows.')
+
+    # Create and upload search types.
     search_types = {'0': 'colons',
                     '1': 'title only',
                     '2': 'keyword and quotes',
@@ -317,9 +360,6 @@ if __name__ == '__main__':
                                             .reset_index(names='search_type_id')
     load_to_bigquery(df_search_types, 'search_types', 'replace')
     print(f'search_types uploaded to BigQuery.')
-
-    #df.apply(load_to_spotify, axis = 1)
-
 
 
 # with DAG(
