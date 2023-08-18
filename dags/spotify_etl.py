@@ -217,7 +217,8 @@ def add_videos_to_playlists(row) -> dict:
 
     Return:
         dict: a skeleton for df_spotify_catalog dataframe.
-        If the first video is not found and add_videos_to_playlists returns None, df_spotify_catalog will be a Series.
+        If the first video is not found and add_videos_to_playlists returns None,
+        df_spotify_catalog will be a Series.
     """
     spotify_playlist_id = get_spotify_playlist_id(row)
     breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
@@ -270,9 +271,9 @@ if __name__ == '__main__':
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
     print(f'{len(df_playlists)} playlists were added.')
 
-    load_to_bigquery(df_playlists[['spotify_playlist_id', 'playlist_name']], 'spotify_playlists')
+    load_to_bigquery(df_playlists[['spotify_playlist_id', 'playlist_name']], 'spotify_playlists', 'replace')
     print(f'spotify_playlists uploaded to BigQuery.')
-    load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids')
+    load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids', 'replace')
     print(f'playlists_ids uploaded to BigQuery.')
 
     # create the dataframe for Spotify albums and tracks and store it in BigQuery
@@ -280,7 +281,7 @@ if __name__ == '__main__':
     df_spotify_catalog.insert(1, 'youtube_video_id', df_youtube_videos['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
     
-    load_to_bigquery(df_spotify_catalog, 'spotify_catalog')
+    load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'replace')
     print(f'spotify_catalog uploaded to BigQuery.')
 
     # create and upload search types
@@ -292,7 +293,7 @@ if __name__ == '__main__':
     df_search_types = pd.DataFrame.from_dict(search_types, orient='index',
                                              columns=['search_type_name']) \
                                             .reset_index(names='search_type_id')
-    load_to_bigquery(df_search_types, 'search_types')
+    load_to_bigquery(df_search_types, 'search_types', 'replace')
     print(f'search_types uploaded to BigQuery.')
 
     #df.apply(load_to_spotify, axis = 1)

@@ -22,18 +22,20 @@ from google.cloud import bigquery
 # from airflow.models.baseoperator import chain
 
 
-default_args = {
-    'owner': 'youtube_client'
-}
+# default_args = {
+#     'owner': 'youtube_client'
+# }
 
 load_dotenv()
 
-videos: dict[str, list[str]] = {}
+playlist_items: dict[str, list[str]] = {}
+liked_videos: dict[str, list[str]] = {}
 
 
 def get_new_credentials():
     client_secrets_path = os.getenv('CLIENT_SECRETS_PATH')
-    flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path, scopes=["https://www.googleapis.com/auth/youtube.readonly"])
+    flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path,
+                                                     scopes=["https://www.googleapis.com/auth/youtube.readonly"])
     credentials = flow.run_local_server(port=4040, authorization_prompt_message='')
 
     return credentials
@@ -111,15 +113,17 @@ def extract_playlist_videos(youtube, playlist_id: str, nextPageToken: str = ''):
 def populate_videos(response, playlist_id: str) -> None:
     for item in response['items']:
         # Remove deleted, private and duplicate videos
-        if item['snippet']['title'] not in ('Deleted video', 'Private video') and item['contentDetails']['videoId'] not in videos:
-            videos[item['contentDetails']['videoId']] = \
-            [playlist_id, item['snippet']['title'], item['snippet']['videoOwnerChannelTitle'], item['snippet']['description']]
+        if item['snippet']['title'] not in ('Deleted video', 'Private video') and item['contentDetails']['videoId'] not in playlist_items:
+            playlist_items[item['contentDetails']['videoId']] = [playlist_id,
+                                                                 item['snippet']['title'],
+                                                                 item['snippet']['videoOwnerChannelTitle'],
+                                                                 item['snippet']['description']]
 
 
-def extract_all_videos(youtube, playlists: dict[str, str]) -> None:
+def extract_all_playlist_items(youtube, playlists: dict[str, str]) -> None:
     """
     Extract playlist items info (video ids, titles and channel names)
-    and store it in the video dictionary ( dict[str, list[str]] ).
+    and store it in the playlist_items dictionary.
 
     Args:
         playlists: iterable object that contains playlist ids
@@ -137,12 +141,12 @@ def extract_all_videos(youtube, playlists: dict[str, str]) -> None:
 def add_ms_duration(youtube) -> None:
     """
     Split video ids into 50-size chunks, call videos().list for each chunk.
-    Extract video duration, convert it to milliseconds and store it in the video dictionary ( dict[str, list[str]] ).
+    Extract video duration, convert it to milliseconds and store it in the playlist_items dictionary.
     """
     chunks: list[list[str]] = []
     chunk: list[str] = []
 
-    for ind, video in enumerate(videos):
+    for ind, video in enumerate(playlist_items):
         if ind % 50 == 0 and chunk: # not include the first empty chunk
             chunks.append(chunk)
             logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
@@ -163,40 +167,111 @@ def add_ms_duration(youtube) -> None:
             
             iso8601_duration = item['contentDetails']['duration']
             duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
-            videos[video_id].append(duration_ms)
+            playlist_items[video_id].append(duration_ms)
+
+
+def extract_liked_videos(youtube, nextPageToken: str = ''):
+    '''
+    Return a requested page of the API call as a json object.
+    Contains information about liked videos.
+    '''
+    if nextPageToken:
+        request = youtube.videos().list(
+                part="snippet,contentDetails",
+                maxResults=50,
+                myRating='like',
+                pageToken=nextPageToken
+            )
+    else:
+        request = youtube.videos().list(
+                part="snippet,contentDetails",
+                maxResults=50,
+                myRating='like'
+            )
+        
+    response = request.execute()
+    return response
+
+
+def populate_liked_videos(response):
+    for item in response['items']:
+        iso8601_duration = item['contentDetails']['duration']
+        duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
+        liked_videos[item['id']] = [item['snippet']['title'],
+                                    item['snippet']['channelTitle'],
+                                    item['snippet']['description'],
+                                    duration_ms]
+
+
+def extract_all_liked_videos(youtube) -> None:
+    """
+    Extract liked videos info (video ids, titles, channel names and duration)
+    and store it in the liked_videos dictionary.
+    """
+    response = extract_liked_videos(youtube)
+    populate_liked_videos(response)
+
+    while response.get('nextPageToken', ''):
+        response = extract_liked_videos(youtube, response['nextPageToken'])
+        populate_liked_videos(response)
 
 
 def transform_playlists_to_df(playlists: dict) -> pd.DataFrame:
     """
-    Return a playlists dataframe from a playlist dict[str, str] object.
+    Return a playlists dataframe from a playlist dictionary.
     """
     playlists_series = pd.Series(playlists)
-    df_playlists = pd.DataFrame(playlists_series, columns=['playlist_name']).reset_index(names='youtube_playlist_id')
+    df_playlists = pd.DataFrame(playlists_series, 
+                                columns=['playlist_name']) \
+                               .reset_index(names='youtube_playlist_id')
     return df_playlists
 
 
-def transform_videos_to_df() -> pd.DataFrame:
+def transform_playlist_items_to_df() -> pd.DataFrame:
     """
-    Return a videos dataframe from a videos dict[str, list[str]] object.
+    Return a playlist_items dataframe from a playlist_items dictionary.
     """
-    df_videos = pd.DataFrame.from_dict(videos, orient='index',
-                                       columns=['youtube_playlist_id', 'title', 'channel_name', 'description', 'duration_ms']) \
-                                      .reset_index(names='video_id')
-    return df_videos
+    df_playlist_items = pd.DataFrame.from_dict(playlist_items, orient='index',
+                                               columns=['youtube_playlist_id',
+                                                        'title',
+                                                        'channel_name',
+                                                        'description',
+                                                        'duration_ms']) \
+                                              .reset_index(names='video_id')
+    return df_playlist_items
 
 
-def load_to_bigquery(df: pd.DataFrame, table_name: str) -> None:
+def transform_liked_videos_to_df() -> pd.DataFrame:
     """
-    Create or replace a table in the marts dataset in Google BigQuery
-    and populate it with data from the pandas dataframe.
+    Return a liked_videos dataframe from a liked_videos dictionary.
+    """
+    df_liked_videos = pd.DataFrame.from_dict(liked_videos, orient='index',
+                                             columns=['title',
+                                                      'channel_name',
+                                                      'description',
+                                                      'duration_ms']) \
+                                            .reset_index(names='video_id')
+    return df_liked_videos
+
+
+def load_to_bigquery(df: pd.DataFrame, table_name: str, method: str) -> None:
+    """
+    Upload the dataframe in Google BigQuery.
+    Create, replace or append depending on the method passed.
     """
     project_id = os.getenv('PROJECT_ID')
     client = bigquery.Client(project=project_id)
-    job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE") # replace the table
     table_id = f'{project_id}.marts.{table_name}'
 
-    client.load_table_from_dataframe(df, table_id, job_config=job_config).result()
-    logging.info(f"Dataframe was succecfully loaded to a BigQuery table: {table_name}")
+    if method == 'replace':
+        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE")
+        client.load_table_from_dataframe(df, table_id, job_config=job_config).result()
+
+    elif method == 'append':
+        client.load_table_from_dataframe(df, table_id).result()
+
+    else:
+        raise Exception('Unexpected method')
 
 
 if __name__ == '__main__':
@@ -205,12 +280,20 @@ if __name__ == '__main__':
 
     playlists = extract_my_playlists(youtube)
     df_playlists = transform_playlists_to_df(playlists)
-    load_to_bigquery(df_playlists, 'youtube_playlists')
+    load_to_bigquery(df_playlists, 'youtube_playlists', 'replace')
+    print(f'youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows.')
 
-    extract_all_videos(youtube, playlists)
+    extract_all_playlist_items(youtube, playlists)
     add_ms_duration(youtube)
-    df_videos = transform_videos_to_df()
-    load_to_bigquery(df_videos, 'youtube_videos')
+    df_playlist_items = transform_playlist_items_to_df()
+    load_to_bigquery(df_playlist_items, 'youtube_videos', 'replace')
+    print(f'playlist_items uploaded to BigQuery, {len(df_playlist_items)} rows.')
+
+    extract_all_liked_videos(youtube)
+    df_liked_videos = transform_liked_videos_to_df()
+    load_to_bigquery(df_liked_videos, 'youtube_videos', 'append')
+    print(f'liked_videos uploaded to BigQuery, {len(df_liked_videos)} rows.')
+
 
 
 
