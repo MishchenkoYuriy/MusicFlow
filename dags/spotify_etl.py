@@ -40,7 +40,7 @@ def extract_df_playlists() -> pd.DataFrame:
     return df_playlists
 
 
-def extract_df_youtube_videos() -> pd.DataFrame:
+def extract_df_playlist_items() -> pd.DataFrame:
     project_id = os.getenv('PROJECT_ID')
     # playlist_name = os.getenv('PLAYLIST_NAME')
     breakpoint_ms = os.getenv('BREAKPOINT_MS')
@@ -64,9 +64,30 @@ def extract_df_youtube_videos() -> pd.DataFrame:
     ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
     """
 
-    df_youtube_videos = client.query(sql).to_dataframe()
-    return df_youtube_videos
+    df_playlist_items = client.query(sql).to_dataframe()
+    return df_playlist_items
 
+
+def extract_df_liked_videos() -> pd.DataFrame:
+    project_id = os.getenv('PROJECT_ID')
+    breakpoint_ms = os.getenv('BREAKPOINT_MS')
+    client = bigquery.Client(project=project_id)
+
+    sql = f"""
+    SELECT
+        v.video_id,
+        v.channel_name,
+        v.title,
+        lower(v.description) description,
+        v.duration_ms
+    
+    FROM `{project_id}.marts.youtube_videos` v
+    WHERE v.youtube_playlist_id is null and v.duration_ms < {breakpoint_ms}
+    ORDER BY v.channel_name, v.title, v.duration_ms
+    """
+
+    df_liked_videos = client.query(sql).to_dataframe()
+    return df_liked_videos
 
 def get_authorization_code():
     scope = ["user-library-modify", "playlist-modify-private"]
@@ -211,13 +232,13 @@ def search_spotify_album(row, q: str, search_type_id: str, limit: int) -> tuple[
     return None, None, None
 
 
-def add_videos_to_playlists(row) -> dict:
+def populate_playlists(row) -> dict:
     """
-    Find albums and videos on Spotify and add them to created playlists.
+    Find albums and tracks on Spotify and add them to created playlists.
 
     Return:
         dict: a skeleton for df_spotify_catalog dataframe.
-        If the first video is not found and add_videos_to_playlists returns None,
+        If the first video is not found and populate_playlists returns None,
         df_spotify_catalog will be a Series.
     """
     spotify_playlist_id = get_spotify_playlist_id(row)
@@ -260,7 +281,8 @@ def add_videos_to_playlists(row) -> dict:
 if __name__ == '__main__':
     # extract dataframes from BigQuery
     df_playlists = extract_df_playlists()
-    df_youtube_videos = extract_df_youtube_videos()
+    df_playlist_items = extract_df_playlist_items()
+    df_liked_videos = extract_df_liked_videos()
     print(f'Datasets were extracted from BigQuery.')
     
     # authorisation
@@ -277,8 +299,8 @@ if __name__ == '__main__':
     print(f'playlists_ids uploaded to BigQuery.')
 
     # create the dataframe for Spotify albums and tracks and store it in BigQuery
-    df_spotify_catalog = df_youtube_videos.apply(add_videos_to_playlists, axis = 1, result_type='expand')
-    df_spotify_catalog.insert(1, 'youtube_video_id', df_youtube_videos['video_id'])
+    df_spotify_catalog = df_playlist_items.apply(populate_playlists, axis = 1, result_type='expand')
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
     
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'replace')
