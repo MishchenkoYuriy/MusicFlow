@@ -181,7 +181,7 @@ def transform_videos_to_df() -> pd.DataFrame:
     """
     df_videos = pd.DataFrame.from_dict(videos, orient='index',
                                        columns=['youtube_playlist_id', 'title', 'channel_name', 'description', 'duration_ms']) \
-                                       .reset_index(names='video_id')
+                                      .reset_index(names='video_id')
     return df_videos
 
 

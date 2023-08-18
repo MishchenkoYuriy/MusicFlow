@@ -2,6 +2,7 @@
 reproduce.md
 reproduce_core.md
 dags/bigquery.py
+analysis/
 
 # airflow
 config/

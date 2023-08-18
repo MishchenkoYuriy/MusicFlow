@@ -99,20 +99,26 @@ def get_spotify_playlist_id(row) -> str:
 
 
 def get_spotify_track_uri(row) -> tuple[str, dict]:
+    # title = re.sub('&', 'and', row['title'])
     
-    # First try, just video title
-    track_uri, track_info = search_spotify_track(row, q=row['title'], limit=2)
+    # First try, just track title
+    track_uri, track_info = search_spotify_track(row, q=row['title'], search_type_id='0', limit=2)
 
-    # Second try, channel name + space + track title
+    # Second try, track + space + track name in quotes
+    if not track_uri:
+        q = f'track "{row["title"]}"'
+        track_uri, track_info = search_spotify_track(row, q=q, search_type_id='1', limit=2)
+
+    # Third try, channel name + space + track title
     if not track_uri:
         artist = re.sub(' - Topic', '', row['channel_name'])
         q = f'{artist} {row["title"]}'
-        track_uri, track_info = search_spotify_track(row, q=q, limit=2)
+        track_uri, track_info = search_spotify_track(row, q=q, search_type_id='2', limit=2)
     
     return track_uri, track_info
 
 
-def search_spotify_track(row, q: str, limit: int) -> tuple[str, dict]:
+def search_spotify_track(row, q: str, search_type_id: str, limit: int) -> tuple[str, dict]:
     tracks = sp.search(q=q, limit=limit, type='track')
 
     for track_num, track in enumerate(tracks['tracks']['items']):
@@ -126,7 +132,9 @@ def search_spotify_track(row, q: str, limit: int) -> tuple[str, dict]:
                                        'artist': track['artists'][0]['name'],
                                        'duration_ms': str(track['duration_ms']),
                                        'found_on_try': str(track_num),
-                                       'difference_ms': str(abs(diff))})
+                                       'difference_ms': str(abs(diff)),
+                                       'q': q,
+                                       'search_type_id': search_type_id})
     
     return None, None
 
@@ -134,17 +142,17 @@ def search_spotify_track(row, q: str, limit: int) -> tuple[str, dict]:
 def get_spotify_tracks_uri_from_album_name(row) -> tuple[str, list, dict]:
     
     # First try, just video title
-    album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=row["title"], limit=2)
+    album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=row["title"], search_type_id='0', limit=2)
 
     # Second try, album + space + album name in quotes
     if not album_uri:
         q = f'album "{row["title"]}"'
-        album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=q, limit=2)
+        album_uri, album_tracks_uri, album_info = search_spotify_album(row, q=q, search_type_id='1', limit=2)
     
     return album_uri, album_tracks_uri, album_info
 
 
-def search_spotify_album(row, q: str, limit: int) -> tuple[str, list, dict]:
+def search_spotify_album(row, q: str, search_type_id: str, limit: int) -> tuple[str, list, dict]:
     albums = sp.search(q=q, limit=limit, type='album')
 
     for album_num, album in enumerate(albums['albums']['items']):    
@@ -178,7 +186,9 @@ def search_spotify_album(row, q: str, limit: int) -> tuple[str, list, dict]:
                                                    'found_on_try': str(album_num),
                                                    'difference_ms': str(abs(diff)),
                                                    'tracks_in_desc': str(tracks_in_desc),
-                                                   'total_tracks': str(len(tracks_uri))})
+                                                   'total_tracks': str(len(tracks_uri)),
+                                                   'q': q,
+                                                   'search_type_id': search_type_id})
     
     return None, None, None
 
@@ -193,7 +203,6 @@ def add_videos_to_playlists(row) -> dict:
     """
     spotify_playlist_id = get_spotify_playlist_id(row)
     breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
-    album_info, track_info = None, None
 
     # ALBUM
     if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
@@ -255,6 +264,17 @@ if __name__ == '__main__':
     
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog')
     print(f'spotify_catalog uploaded to BigQuery.')
+
+    # create and upload search types
+    search_types = {'0': 'title only',
+                    '1': 'keyword and quotes',
+                    '2': 'channel name and title'}
+    
+    df_search_types = pd.DataFrame.from_dict(search_types, orient='index',
+                                             columns=['search_type_name']) \
+                                            .reset_index(names='search_type_id')
+    load_to_bigquery(df_search_types, 'search_types')
+    print(f'search_types uploaded to BigQuery.')
 
     #df.apply(load_to_spotify, axis = 1)
 
