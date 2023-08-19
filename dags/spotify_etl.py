@@ -249,7 +249,7 @@ def populate_playlists(row) -> dict:
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             sp.playlist_add_items(spotify_playlist_id, album_tracks_uri) # add all album tracks to playlist
-            # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+            sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
 
             return dict(dict({'spotify_uri': album_uri,
                               'spotify_playlist_id': spotify_playlist_id,
@@ -290,7 +290,7 @@ def populate_liked_songs(row) -> dict:
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
-            # sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
+            sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
 
             return dict(dict({'spotify_uri': album_uri,
                               'category': '0'}),
@@ -344,7 +344,7 @@ if __name__ == '__main__':
     # Like Spotify tracks and store info in BigQuery.
     df_spotify_catalog = df_liked_videos.apply(populate_liked_songs, axis = 1, result_type='expand')
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
-    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_liked_videos['video_id'])
 
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'append')
     print(f'spotify_catalog for liked_videos uploaded to BigQuery, {len(df_spotify_catalog)} rows.')
