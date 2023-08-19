@@ -1,36 +1,45 @@
+import re
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 
-def remove_playlists(user_id: str) -> tuple[str, int]:
+def populate_playlist_ids() -> list:
     '''
-    Find and delete the user's first 50 playlists.
+    Return a list of playlists IDs for the current user.
+    '''
+    playlist_ids = []
 
-    Return:
-        playlists['next']: url to the next 50 playlists; None if there are no more playlists.
-        len(playlists['items']): number of deleted playlists.
-    '''
-    playlists = sp.user_playlists(user_id)
-    if playlists:
+    playlists = sp.current_user_playlists()
+    next_playlists = playlists['next']
+
+    for playlist in playlists['items']:
+        playlist_ids.append(playlist['id'])
+
+    while next_playlists:
+        # extract offset from the url
+        offset = re.search('\d+', re.search('offset=\d+', next_playlists)[0])[0]
+        playlists = sp.current_user_playlists(offset=offset)
+        next_playlists = playlists['next']
+        
         for playlist in playlists['items']:
-            sp.current_user_unfollow_playlist(playlist['id'])
+            playlist_ids.append(playlist['id'])
 
-        return playlists['next'], len(playlists['items'])
+    return playlist_ids
+
+
+def remove(playlist_ids: list) -> None:
+    '''
+    Remove all playlists from the list of IDs.
+    '''
+    for playlist_id in playlist_ids:
+        sp.current_user_unfollow_playlist(playlist_id)
 
 
 if __name__ == '__main__':
     scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    user_info = sp.current_user()
-    user_id = user_info['id']
+    playlist_ids = populate_playlist_ids()
+    remove(playlist_ids)
 
-    removed_total = 0
-    playlists_next, removed = remove_playlists(user_id)
-    removed_total += removed
-
-    while playlists_next:
-        playlists_next, removed = remove_playlists(user_id)
-        removed_total += removed
-
-    print(f'{removed_total} playlists were removed')
+    print(f'{len(playlist_ids)} playlists were removed')
