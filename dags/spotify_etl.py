@@ -335,16 +335,16 @@ if __name__ == '__main__':
 
     # Save Spotify albums and tracks in created playlists and store info in BigQuery.
     df_spotify_catalog = df_playlist_items.apply(populate_playlists, axis = 1, result_type='expand')
-    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
 
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'replace')
     print(f'spotify_catalog for playlist_items uploaded to BigQuery, {len(df_spotify_catalog)} rows.')
 
     # Like Spotify tracks and store info in BigQuery.
     df_spotify_catalog = df_liked_videos.apply(populate_liked_songs, axis = 1, result_type='expand')
-    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
     df_spotify_catalog = df_spotify_catalog.dropna(how = 'all')
+    df_spotify_catalog.insert(1, 'youtube_video_id', df_playlist_items['video_id'])
 
     load_to_bigquery(df_spotify_catalog, 'spotify_catalog', 'append')
     print(f'spotify_catalog for liked_videos uploaded to BigQuery, {len(df_spotify_catalog)} rows.')
