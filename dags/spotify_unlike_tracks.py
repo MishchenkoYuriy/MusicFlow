@@ -1,9 +1,16 @@
+import os
 import re
+from dotenv import load_dotenv
+from datetime import datetime
+
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
 
-def populate_unlike_it() -> list:
+load_dotenv()
+
+
+def populate_unlike_it(remove_after: datetime = None) -> list:
     '''
     Return a list of liked track URIs for the current user.
     '''
@@ -13,7 +20,10 @@ def populate_unlike_it() -> list:
     next_liked = liked_tracks['next']
 
     for track in liked_tracks['items']:
-        unlike_it.append(track['track']['uri'])
+        added_at = datetime.strptime(track['added_at'], '%Y-%m-%dT%H:%M:%SZ')
+        # if remove_after is None or track was added after remove_after
+        if not remove_after or added_at > remove_after:
+            unlike_it.append(track['track']['uri'])
 
     while next_liked:
         # extract offset from the url
@@ -42,7 +52,13 @@ def unlike(unlike_it: list) -> None:
 if __name__ == '__main__':
     scope = ["user-library-read", "user-library-modify"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    
+    if os.getenv('REMOVE_AFTER'): 
+        remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
+        unlike_it = populate_unlike_it(remove_after)
 
-    unlike_it = populate_unlike_it()
+    else: # if REMOVE_AFTER is not specified, remove all liked tracks
+        unlike_it = populate_unlike_it()
+
     unlike(unlike_it)
     print(f'{len(unlike_it)} liked songs were removed')
