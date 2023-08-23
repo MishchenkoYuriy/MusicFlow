@@ -41,8 +41,7 @@ This project uses channel names, video titles, descriptions and durations from Y
 - You can have a track saved in the different playlists.
 
 ## How does it find music? Exploring the Search Engine
-The main problem is to find specific albums and tracks from the dirty YouTube videos. The first step to do that is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). Videos with a duration less than the threshold will be searched as tracks, and those greater than or equal to the threshold will be searched as albums.<br>
-For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track.
+The main problem is to find specific albums and tracks from the dirty YouTube videos. The first step to do that is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). The engine searches videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If the treashold is not specified, the engine will search all videos as tracks.
 
 ### Searching tracks
 1. If the video belongs to a [topic channel](https://support.google.com/youtube/answer/7636475?hl=en#zippy=%2Chow-does-youtube-decide-when-to-auto-generate-a-topic-channel-for-an-artist) (` - Topic` in the channel name), the title is probably a track name and the channel name (without ` - Topic`) is the name of an artist. The engine will use Spotify syntax as the strictest search:<br>

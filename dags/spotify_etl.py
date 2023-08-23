@@ -242,10 +242,10 @@ def populate_playlists(row) -> dict:
         df_spotify_catalog will be a Series.
     """
     spotify_playlist_id = get_spotify_playlist_id(row)
-    threshold_ms = int(os.getenv('THRESHOLD_MS'))
 
     # ALBUM
-    if row['duration_ms'] >= threshold_ms: # a YouTube video is probably a album
+    # THRESHOLD_MS is specified and the duration of the video is greater than or equal to it
+    if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')): 
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             sp.playlist_add_items(spotify_playlist_id, album_tracks_uri) # add all album tracks to playlist
@@ -259,7 +259,8 @@ def populate_playlists(row) -> dict:
             print(f'Album "{row["title"]}" not found on Spotify')
     
     # TRACK
-    else: # a YouTube video is probably a track
+    # either THRESHOLD_MS is not specified or the duration of the video is less than it
+    else:
         track_uri, track_info = get_spotify_track_uri(row)
         if track_uri:
             sp.playlist_add_items(spotify_playlist_id, [track_uri]) # add all tracks to playlist
@@ -283,10 +284,10 @@ def populate_liked_songs(row) -> dict:
         If the first video is not found and populate_liked_songs returns None,
         df_spotify_catalog will be a Series.
     """
-    threshold_ms = int(os.getenv('THRESHOLD_MS'))
 
     # ALBUM
-    if row['duration_ms'] >= threshold_ms: # a YouTube video is probably a album
+    # THRESHOLD_MS is specified and the duration of the video is greater than or equal to it
+    if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             # sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
@@ -299,7 +300,8 @@ def populate_liked_songs(row) -> dict:
             print(f'Album "{row["title"]}" not found on Spotify')
     
     # TRACK
-    else: # a YouTube video is probably a track
+    # either THRESHOLD_MS is not specified or the duration of the video is less than it
+    else:
         track_uri, track_info = get_spotify_track_uri(row)
         if track_uri:
             sp.current_user_saved_tracks_add([track_uri]) # like all tracks
