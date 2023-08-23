@@ -43,7 +43,7 @@ def extract_df_playlists() -> pd.DataFrame:
 def extract_df_playlist_items() -> pd.DataFrame:
     project_id = os.getenv('PROJECT_ID')
     # playlist_name = os.getenv('PLAYLIST_NAME')
-    breakpoint_ms = os.getenv('BREAKPOINT_MS')
+    threshold_ms = os.getenv('THRESHOLD_MS')
     client = bigquery.Client(project=project_id)
 
     sql = f"""
@@ -60,7 +60,7 @@ def extract_df_playlist_items() -> pd.DataFrame:
     INNER JOIN `{project_id}.marts.youtube_playlists` p
     ON v.youtube_playlist_id = p.youtube_playlist_id
 
-    WHERE v.duration_ms < {breakpoint_ms}
+    WHERE v.duration_ms < {threshold_ms}
     ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
     """
 
@@ -70,7 +70,7 @@ def extract_df_playlist_items() -> pd.DataFrame:
 
 def extract_df_liked_videos() -> pd.DataFrame:
     project_id = os.getenv('PROJECT_ID')
-    breakpoint_ms = os.getenv('BREAKPOINT_MS')
+    threshold_ms = os.getenv('THRESHOLD_MS')
     client = bigquery.Client(project=project_id)
 
     sql = f"""
@@ -82,7 +82,7 @@ def extract_df_liked_videos() -> pd.DataFrame:
         v.duration_ms
     
     FROM `{project_id}.marts.youtube_videos` v
-    WHERE v.youtube_playlist_id is null and v.duration_ms < {breakpoint_ms}
+    WHERE v.youtube_playlist_id is null and v.duration_ms < {threshold_ms}
     ORDER BY v.channel_name, v.title, v.duration_ms
     """
 
@@ -242,10 +242,10 @@ def populate_playlists(row) -> dict:
         df_spotify_catalog will be a Series.
     """
     spotify_playlist_id = get_spotify_playlist_id(row)
-    breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
+    threshold_ms = int(os.getenv('THRESHOLD_MS'))
 
     # ALBUM
-    if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
+    if row['duration_ms'] >= threshold_ms: # a YouTube video is probably a album
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             sp.playlist_add_items(spotify_playlist_id, album_tracks_uri) # add all album tracks to playlist
@@ -283,10 +283,10 @@ def populate_liked_songs(row) -> dict:
         If the first video is not found and populate_liked_songs returns None,
         df_spotify_catalog will be a Series.
     """
-    breakpoint_ms = int(os.getenv('BREAKPOINT_MS'))
+    threshold_ms = int(os.getenv('THRESHOLD_MS'))
 
     # ALBUM
-    if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
+    if row['duration_ms'] >= threshold_ms: # a YouTube video is probably a album
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
             # sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
