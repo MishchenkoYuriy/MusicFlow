@@ -289,7 +289,7 @@ def populate_liked_songs(row) -> dict:
     if row['duration_ms'] >= breakpoint_ms: # a YouTube video is probably a album
         album_uri, album_tracks_uri, album_info = get_spotify_tracks_uri_from_album_name(row)
         if album_uri:
-            sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
+            # sp.current_user_saved_tracks_add(album_tracks_uri) # like all tracks in the album
             sp.current_user_saved_albums_add([album_uri]) # save the album to current user library
 
             return dict(dict({'spotify_uri': album_uri,

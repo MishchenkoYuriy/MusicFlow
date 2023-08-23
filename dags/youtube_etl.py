@@ -194,6 +194,7 @@ def extract_liked_videos(youtube, nextPageToken: str = ''):
 
 
 def populate_liked_videos(response):
+    # deleted and private videos actomaticly excluded by YouTube Data API
     for item in response['items']:
         iso8601_duration = item['contentDetails']['duration']
         duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
