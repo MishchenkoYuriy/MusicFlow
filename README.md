@@ -43,6 +43,7 @@ This project uses channel names, video titles, descriptions and durations from Y
 - Two or more videos of the same track can be liked.
 - Two or more videos of the same track can be saved in one playlist.
 - A track can be saved in the different playlists.
+- Playlists can have the same name.
 
 ## How does it find music? Exploring the Search Engine
 The main problem is to find specific albums and tracks from the dirty YouTube videos. The first step to do that is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). The engine searches videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If the treashold is not specified, the engine will search all videos as tracks.

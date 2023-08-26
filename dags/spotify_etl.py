@@ -163,6 +163,7 @@ def search_track(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
             # if track['uri'] not in spotify_tracks: # condition doesn't matter
             spotify_tracks[track['uri']] = (track['album']['uri'],
                                             track['name'],
+                                            '; '.join(artist for artist in artists),
                                             str(track['duration_ms']))
             
             # always make a note in log
@@ -261,6 +262,8 @@ def search_album(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
                 # if track_uri not in spotify_tracks: # condition doesn't matter
                 spotify_tracks[track_uri] = (album['uri'],
                                              title,
+                                             # Same as album artists, not always correct, but we don't iterate for every artist on every track.
+                                             '; '.join(artist['name'] for artist in album['artists']), 
                                              str(duration_ms))
             
             # always make a note in log
@@ -326,7 +329,7 @@ def spotify_tracks_to_df(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
     df_spotify_tracks = pd.DataFrame.from_dict(spotify_tracks, orient='index',
                                                columns=['album_uri',
                                                         'track_title',
-                                                        # 'track_artists',
+                                                        'track_artists',
                                                         'duration_ms']) \
                                                 .reset_index(names='track_uri')
     return df_spotify_tracks
