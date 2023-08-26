@@ -146,8 +146,8 @@ def search_track(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
         if diff <= 5000 or (track_in_title and artists_in_title):
             print(f'Track "{row["title"]}" found on try: {track_num}, ' \
                   f'difference: {round(diff / 1000)} seconds. ')
-
-            if (track['uri'], spotify_playlist_id) not in spotify_log: # search with primary key
+            
+            if (track['uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
                 status = 'saved'
                 if spotify_playlist_id: # populate_playlists
                     # Add the track to the playlist
@@ -160,19 +160,22 @@ def search_track(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
                 status = 'skipped'
                 print(f'WARNING: Track "{row["title"]}" skipped (already exsist)')
 
-            if track['uri'] not in spotify_tracks:
-                spotify_tracks[track['uri']] = (track['album']['uri'],
-                                                track['name'],
-                                                track['duration_ms'])
+            # if track['uri'] not in spotify_tracks: # condition doesn't matter
+            spotify_tracks[track['uri']] = (track['album']['uri'],
+                                            track['name'],
+                                            str(track['duration_ms']))
             
-            spotify_log[(track['uri'], spotify_playlist_id)] = (row['video_id'],
-                                                                # 1, # category
-                                                                track_num,
-                                                                abs(diff),
-                                                                None,
-                                                                q,
-                                                                search_type_id,
-                                                                status)
+            # always make a note in log
+            spotify_log.append((track['uri'],
+                                spotify_playlist_id,
+                                row['video_id'],
+                                # 1, # category
+                                str(track_num),
+                                str(abs(diff)),
+                                None,
+                                q,
+                                search_type_id,
+                                status))
 
             return True
         
@@ -227,7 +230,7 @@ def search_album(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles '
                   f'({round(percent_in_desc)}%) in the YouTube video description.')
             
-            if (album['uri'], spotify_playlist_id) not in spotify_log: # search with primary key
+            if (album['uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
                 status = 'saved'
                 if spotify_playlist_id: # populate_playlists
 
@@ -248,26 +251,29 @@ def search_album(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
                 status = 'skipped'
                 print(f'WARNING: Album "{row["title"]}" skipped (already exsist)')
 
-            if album['uri'] not in spotify_albums:
-                spotify_albums[album['uri']] = (album['name'],
-                                                '; '.join(artist['name'] for artist in album['artists']),
-                                                album_length,
-                                                len(tracks_uri))
+            # if album['uri'] not in spotify_albums:  # condition doesn't matter
+            spotify_albums[album['uri']] = (album['name'],
+                                            '; '.join(artist['name'] for artist in album['artists']),
+                                            str(album_length),
+                                            str(len(tracks_uri)))
             
             for track_uri, title, duration_ms in tracks_info:
-                if track_uri not in spotify_tracks:
-                    spotify_tracks[track_uri] = (album['uri'],
-                                                 title,
-                                                 duration_ms)
-                
-            spotify_log[(album['uri'], spotify_playlist_id)] = (row['video_id'],
-                                                                # 0, # category
-                                                                album_num,
-                                                                abs(diff),
-                                                                tracks_in_desc,
-                                                                q,
-                                                                search_type_id,
-                                                                status)
+                # if track_uri not in spotify_tracks: # condition doesn't matter
+                spotify_tracks[track_uri] = (album['uri'],
+                                             title,
+                                             str(duration_ms))
+            
+            # always make a note in log
+            spotify_log.append((album['uri'],
+                                spotify_playlist_id,
+                                row['video_id'],
+                                # 0, # category
+                                str(album_num),
+                                str(abs(diff)),
+                                str(tracks_in_desc),
+                                q,
+                                search_type_id,
+                                status))
 
             return True
         
@@ -300,7 +306,7 @@ def populate_spotify(row) -> None:
         save_track(row, spotify_playlist_id)
 
 
-def spotify_albums_to_df(spotify_albums: dict) -> pd.DataFrame:
+def spotify_albums_to_df(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify album dataframe from a album dictionary.
     """
@@ -313,7 +319,7 @@ def spotify_albums_to_df(spotify_albums: dict) -> pd.DataFrame:
     return df_spotify_albums
 
 
-def spotify_tracks_to_df(spotify_tracks: dict) -> pd.DataFrame:
+def spotify_tracks_to_df(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify track dataframe from a track dictionary.
     """
@@ -326,32 +332,35 @@ def spotify_tracks_to_df(spotify_tracks: dict) -> pd.DataFrame:
     return df_spotify_tracks
 
 
-def spotify_log_to_df(spotify_log: dict) -> pd.DataFrame:
+def spotify_log_to_df(spotify_log: list[tuple[str]]) -> pd.DataFrame:
     """
-    Return a spotify log dataframe from a log dictionary.
+    Return a spotify log dataframe from a log list.
     """
-    df_spotify_log = pd.DataFrame.from_dict(spotify_log, orient='index',
-                                            columns=['youtube_video_id',
-                                                     # 'category',
-                                                     'found_on_try',
-                                                     'difference_ms',
-                                                     'tracks_in_desc',
-                                                     'q',
-                                                     'search_type_id',
-                                                     'status']) \
-                                            .reset_index(names='temp_column')
-    #df_spotify_catalog.insert(1, 'youtube_video_id', df_liked_videos['video_id'])
-
-    # index = (found uri, playlist id)
-    # df_spotify_log['spotify_uri'] = df_spotify_log['temp_column'].str[0]
-    # df_spotify_log['spotify_playlist_id'] = df_spotify_log['temp_column'].str[1]
-
-    df_spotify_log.insert(1, 'spotify_uri', df_spotify_log['temp_column'].str[0])
-    df_spotify_log.insert(2, 'spotify_playlist_id', df_spotify_log['temp_column'].str[1])
-    df_spotify_log = df_spotify_log.drop(columns=['temp_column'])
+    df_spotify_log = pd.DataFrame(spotify_log, columns=['spotify_uri',
+                                                        'spotify_playlist_id',
+                                                        'youtube_video_id',
+                                                        # 'category',
+                                                        'found_on_try',
+                                                        'difference_ms',
+                                                        'tracks_in_desc',
+                                                        'q',
+                                                        'search_type_id',
+                                                        'status'])
 
     return df_spotify_log
 
+
+def create_df_search_types() -> pd.DataFrame:
+    search_types = {'0': 'colons',
+                    '1': 'title only',
+                    '2': 'keyword and quotes',
+                    '3': 'channel name and title'}
+    
+    df_search_types = pd.DataFrame.from_dict(search_types, orient='index',
+                                            columns=['search_type_name']) \
+                                            .reset_index(names='search_type_id')
+    
+    return df_search_types
 
 if __name__ == '__main__':
     # Extract dataframes from BigQuery.
@@ -375,7 +384,7 @@ if __name__ == '__main__':
     # Populate Spotify.
     spotify_albums: dict[str, tuple[str]] = {}
     spotify_tracks: dict[str, tuple[str]] = {}
-    spotify_log: dict[tuple[str], tuple[str]] = {}
+    spotify_log: list[tuple[str]] = []
 
     df_videos.apply(populate_spotify, axis = 1)
 
@@ -391,15 +400,8 @@ if __name__ == '__main__':
     load_to_bigquery(df_spotify_log, 'spotify_log', 'replace')
     print(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
 
-    # Create and upload search types.
-    search_types = {'0': 'colons',
-                    '1': 'title only',
-                    '2': 'keyword and quotes',
-                    '3': 'channel name and title'}
-    
-    df_search_types = pd.DataFrame.from_dict(search_types, orient='index',
-                                             columns=['search_type_name']) \
-                                            .reset_index(names='search_type_id')
+    # Create search types.
+    df_search_types = create_df_search_types()
     load_to_bigquery(df_search_types, 'search_types', 'replace')
     print(f'search_types uploaded to BigQuery.')
 

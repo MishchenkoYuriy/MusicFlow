@@ -217,7 +217,7 @@ def extract_all_liked_videos(youtube) -> None:
         populate_liked_videos(response)
 
 
-def playlists_to_df(playlists: dict) -> pd.DataFrame:
+def playlists_to_df(playlists: dict[str, str]) -> pd.DataFrame:
     """
     Return a playlists dataframe from a playlist dictionary.
     """
@@ -228,7 +228,7 @@ def playlists_to_df(playlists: dict) -> pd.DataFrame:
     return df_playlists
 
 
-def playlist_items_to_df() -> pd.DataFrame:
+def playlist_items_to_df(playlist_items: dict[str, list[str]]) -> pd.DataFrame:
     """
     Return a playlist_items dataframe from a playlist_items dictionary.
     """
@@ -242,7 +242,7 @@ def playlist_items_to_df() -> pd.DataFrame:
     return df_playlist_items
 
 
-def liked_videos_to_df() -> pd.DataFrame:
+def liked_videos_to_df(liked_videos: dict[str, list[str]]) -> pd.DataFrame:
     """
     Return a liked_videos dataframe from a liked_videos dictionary.
     """
@@ -286,12 +286,12 @@ if __name__ == '__main__':
 
     extract_all_playlist_items(youtube, playlists)
     add_ms_duration(youtube)
-    df_playlist_items = playlist_items_to_df()
+    df_playlist_items = playlist_items_to_df(playlist_items)
     load_to_bigquery(df_playlist_items, 'youtube_videos', 'replace')
     print(f'playlist_items uploaded to BigQuery, {len(df_playlist_items)} rows.')
 
     extract_all_liked_videos(youtube)
-    df_liked_videos = liked_videos_to_df()
+    df_liked_videos = liked_videos_to_df(liked_videos)
     load_to_bigquery(df_liked_videos, 'youtube_videos', 'append')
     print(f'liked_videos uploaded to BigQuery, {len(df_liked_videos)} rows.')
 
