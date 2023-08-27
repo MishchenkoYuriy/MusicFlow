@@ -165,7 +165,7 @@ def add_ms_duration(youtube) -> None:
             duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
             
             i = (chunk_ind * 50) + item_ind
-            playlist_items[i].append(str(duration_ms))
+            playlist_items[i].append(duration_ms)
 
 
 def extract_liked_videos(youtube, nextPageToken: str = ''):
@@ -199,7 +199,7 @@ def populate_liked_videos(response):
         liked_videos[item['id']] = [item['snippet']['title'],
                                     item['snippet']['channelTitle'],
                                     item['snippet']['description'],
-                                    str(duration_ms)]
+                                    duration_ms]
 
 
 def extract_all_liked_videos(youtube) -> None:

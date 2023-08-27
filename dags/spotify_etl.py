@@ -98,7 +98,7 @@ def get_spotify_playlist_id(row) -> str:
     return playlist.iloc[0, 2]
 
 
-def save_track(row, spotify_playlist_id: str) -> None:
+def find_track(row) -> dict:
     # title = re.sub('&', 'and', row['title'])
 
     # First try, depends on whether it is a Topic Channel
@@ -107,27 +107,28 @@ def save_track(row, spotify_playlist_id: str) -> None:
         artist = re.sub('\'', ' ', artist)
 
         q = f'track:{row["title"]} artist:{artist}'
-        found = search_track(row, spotify_playlist_id, q=q, search_type_id='0', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id='0', limit=2)
     
     else:
-        found = search_track(row, spotify_playlist_id, q=row['title'], search_type_id='1', limit=2)
+        track_info = qsearch_track(row, q=row['title'], search_type_id='1', limit=2)
 
     # Second try, track + space + track name in quotes
-    if not found:
+    if not track_info:
         q = f'track "{row["title"]}"'
-        found = search_track(row, spotify_playlist_id, q=q, search_type_id='2', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id='2', limit=2)
 
     # Third try, channel name + space + track title
-    if not found:
+    if not track_info:
         artist = re.sub(' - Topic', '', row['channel_name'])
         q = f'{artist} {row["title"]}'
-        found = search_track(row, spotify_playlist_id, q=q, search_type_id='3', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id='3', limit=2)
 
-    if not found:
+    if not track_info:
         print(f'Track "{row["title"]}" not found on Spotify')
+    return track_info
 
 
-def search_track(row, spotify_playlist_id: str, q: str, search_type_id: str, limit: int) -> bool:
+def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
     tracks = sp.search(q=q, limit=limit, type='track')
 
     for track_num, track in enumerate(tracks['tracks']['items']):
@@ -147,62 +148,74 @@ def search_track(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
             print(f'Track "{row["title"]}" found on try: {track_num}, ' \
                   f'difference: {round(diff / 1000)} seconds. ')
             
-            if (track['uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
-                status = 'saved'
-                if spotify_playlist_id: # populate_playlists
-                    # Add the track to the playlist
-                    sp.playlist_add_items(spotify_playlist_id, [track['uri']])
-                
-                else: # populate_liked_songs
-                    # Like the track
-                    sp.current_user_saved_tracks_add([track['uri']])
-            else:
-                status = 'skipped'
-                print(f'WARNING: Track "{row["title"]}" skipped (already exsist)')
-
-            # if track['uri'] not in spotify_tracks: # condition doesn't matter
-            spotify_tracks[track['uri']] = (track['album']['uri'],
-                                            track['name'],
-                                            '; '.join(artist for artist in artists),
-                                            str(track['duration_ms']))
+            return {
+                'track_uri': track['uri'],
+                'album_uri': track['album']['uri'],
+                'track_title': track['name'],
+                'track_artists': '; '.join(artist for artist in artists),
+                'duration_ms': track['duration_ms'],
+                'found_on_try': track_num,
+                'difference_ms': abs(diff),
+                'tracks_in_desc': 1,
+                'q': q,
+                'search_type_id': search_type_id
+            }
             
-            # always make a note in log
-            spotify_log.append((track['uri'],
-                                spotify_playlist_id,
-                                row['video_id'],
-                                # 1, # category
-                                str(track_num),
-                                str(abs(diff)),
-                                None,
-                                q,
-                                search_type_id,
-                                status))
 
-            return True
+def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> str:
+    if (track_info['track_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+        status = 'saved'
+        if spotify_playlist_id: # populate playlists
+            # Add the track to the playlist
+            sp.playlist_add_items(spotify_playlist_id, [track_info['track_uri']])
         
-        else:
-
-            return False
-
-
-def save_album(row, spotify_playlist_id: str) -> None:
+        else: # populate liked songs
+            # Like the track
+            sp.current_user_saved_tracks_add([track_info['track_uri']])
+    else:
+        status = 'skipped'
+        print(f'WARNING: Track "{video_title}" skipped (already exsist)')
     
+    return status
+
+
+def log_track(track_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+    # if track['uri'] not in spotify_tracks: # condition doesn't matter
+    spotify_tracks[track_info['track_uri']] = (track_info['album_uri'],
+                                               track_info['track_title'],
+                                               track_info['track_artists'],
+                                               track_info['duration_ms'])
+    
+    spotify_log.append((track_info['track_uri'],
+                        spotify_playlist_id,
+                        video_id,
+                        # 1, # uri_type
+                        track_info['found_on_try'],
+                        track_info['difference_ms'],
+                        track_info['tracks_in_desc'],
+                        track_info['q'],
+                        track_info['search_type_id'],
+                        status))
+
+
+def find_album(row) -> dict:
     # First try, just video title
-    found = search_album(row, spotify_playlist_id, q=row["title"], search_type_id='1', limit=2)
+    album_info = qsearch_album(row, q=row["title"], search_type_id='1', limit=2)
 
     # Second try, album + space + album name in quotes
-    if not found:
+    if not album_info:
         q = f'album "{row["title"]}"'
-        found = search_album(row, spotify_playlist_id, q=q, search_type_id='2', limit=2)
+        album_info = qsearch_album(row, q=q, search_type_id='2', limit=2)
 
-    if not found:
+    if not album_info:
         print(f'Album "{row["title"]}" not found on Spotify')
+    return album_info
 
 
-def search_album(row, spotify_playlist_id: str, q: str, search_type_id: str, limit: int) -> bool:
+def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
     albums = sp.search(q=q, limit=limit, type='album')
 
-    for album_num, album in enumerate(albums['albums']['items']):    
+    for album_num, album in enumerate(albums['albums']['items']):
         tracks_uri: list[str] = [] # track uri
         tracks_info: list[tuple[str, str, int]] = [] # (track uri, track title, track duration ms)
         diff = row['duration_ms']
@@ -231,58 +244,74 @@ def search_album(row, spotify_playlist_id: str, q: str, search_type_id: str, lim
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles '
                   f'({round(percent_in_desc)}%) in the YouTube video description.')
             
-            if (album['uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
-                status = 'saved'
-                if spotify_playlist_id: # populate_playlists
+            return {
+                'album_uri': album['uri'],
+                'tracks_uri': tracks_uri,
+                'tracks_info': tracks_info,
+                'album_title': album['name'],
+                'album_artists': '; '.join(artist['name'] for artist in album['artists']),
+                'duration_ms': album_length,
+                'total_tracks': len(tracks_uri),
+                'found_on_try': album_num,
+                'difference_ms': abs(diff),
+                'tracks_in_desc': tracks_in_desc,
+                'q': q,
+                'search_type_id': search_type_id
+            }
 
-                    # Add album tracks not present in the playlist to the playlist
-                    sp.playlist_add_items(spotify_playlist_id, tracks_uri)
 
-                    # Save the album to current user library
-                    # sp.current_user_saved_albums_add([album['uri']])
-                
-                else: # populate_liked_songs
+def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> str:
+    if (album_info['album_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+        status = 'saved'
+        if spotify_playlist_id: # populate playlists
 
-                    # Like all tracks in the album
-                    # sp.current_user_saved_tracks_add(album_tracks_uri)
+            # Add album tracks not present in the playlist to the playlist
+            sp.playlist_add_items(spotify_playlist_id, album_info['tracks_uri'])
 
-                    # Save the album to current user library
-                    sp.current_user_saved_albums_add([album['uri']]) 
-            else:
-                status = 'skipped'
-                print(f'WARNING: Album "{row["title"]}" skipped (already exsist)')
-
-            # if album['uri'] not in spotify_albums:  # condition doesn't matter
-            spotify_albums[album['uri']] = (album['name'],
-                                            '; '.join(artist['name'] for artist in album['artists']),
-                                            str(album_length),
-                                            str(len(tracks_uri)))
-            
-            for track_uri, title, duration_ms in tracks_info:
-                # if track_uri not in spotify_tracks: # condition doesn't matter
-                spotify_tracks[track_uri] = (album['uri'],
-                                             title,
-                                             # Same as album artists, not always correct, but we don't iterate for every artist on every track.
-                                             '; '.join(artist['name'] for artist in album['artists']), 
-                                             str(duration_ms))
-            
-            # always make a note in log
-            spotify_log.append((album['uri'],
-                                spotify_playlist_id,
-                                row['video_id'],
-                                # 0, # category
-                                str(album_num),
-                                str(abs(diff)),
-                                str(tracks_in_desc),
-                                q,
-                                search_type_id,
-                                status))
-
-            return True
+            # Save the album to current user library
+            # sp.current_user_saved_albums_add([album['uri']])
         
-        else:
+        else: # populate liked songs
 
-            return False
+            # Like all tracks in the album
+            # sp.current_user_saved_tracks_add(album_tracks_uri)
+
+            # Save the album to current user library
+            sp.current_user_saved_albums_add([album_info['album_uri']])
+
+    else:
+        status = 'skipped'
+        print(f'WARNING: Album "{video_title}" skipped (already exsist)')
+
+    return status
+
+
+def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+    # if album_info['album_uri'] not in spotify_albums:  # condition doesn't matter
+    spotify_albums[album_info['album_uri']] = (album_info['album_title'],
+                                               album_info['album_artists'],
+                                               album_info['duration_ms'],
+                                               album_info['total_tracks'])
+    
+    for track_uri, title, duration_ms in album_info['tracks_info']:
+        # if track_uri not in spotify_tracks: # condition doesn't matter
+        spotify_tracks[track_uri] = (album_info['album_uri'],
+                                     title,
+                                     # Same as album artists, not always correct,
+                                     # but we don't iterate for every artist on every track.
+                                     album_info['album_artists'], 
+                                     duration_ms)
+    
+    spotify_log.append((album_info['album_uri'],
+                        spotify_playlist_id,
+                        video_id,
+                        # 0, # uri_type
+                        album_info['found_on_try'],
+                        album_info['difference_ms'],
+                        album_info['tracks_in_desc'],
+                        album_info['q'],
+                        album_info['search_type_id'],
+                        status))
 
 
 def populate_spotify(row) -> None:
@@ -301,12 +330,18 @@ def populate_spotify(row) -> None:
     # ALBUM
     # THRESHOLD_MS is specified and the duration of the video is greater than or equal to it
     if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
-        save_album(row, spotify_playlist_id)
+        album_info = find_album(row)
+        if album_info:
+            status = save_album(album_info, spotify_playlist_id, row['title'])
+            log_album(album_info, spotify_playlist_id, row['video_id'], status)
     
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
     else:
-        save_track(row, spotify_playlist_id)
+        track_info = find_track(row)
+        if track_info:
+            status = save_track(track_info, spotify_playlist_id, row['title'])
+            log_track(track_info, spotify_playlist_id, row['video_id'], status)
 
 
 def spotify_albums_to_df(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -342,7 +377,7 @@ def spotify_log_to_df(spotify_log: list[tuple[str]]) -> pd.DataFrame:
     df_spotify_log = pd.DataFrame(spotify_log, columns=['spotify_uri',
                                                         'spotify_playlist_id',
                                                         'youtube_video_id',
-                                                        # 'category',
+                                                        # 'uri_type',
                                                         'found_on_try',
                                                         'difference_ms',
                                                         'tracks_in_desc',

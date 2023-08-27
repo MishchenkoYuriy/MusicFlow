@@ -40,9 +40,9 @@ This project uses channel names, video titles, descriptions and durations from Y
 - A <b>track duration</b> may vary slightly between music platforms.
 - A <b>video title</b> may or may not include artists, track name or series/game.
 - An <b>album description</b> on YouTube usually includes track names, but the format may vary.
-- Two or more videos of the same track can be liked.
-- Two or more videos of the same track can be saved in one playlist.
-- A track can be saved in the different playlists.
+- Two or more videos of the same track or album can be liked.
+- Two or more videos of the same track or album can be saved in one playlist.
+- A video (track or album) can be saved in the different playlists.
 - Playlists can have the same name.
 
 ## How does it find music? Exploring the Search Engine
