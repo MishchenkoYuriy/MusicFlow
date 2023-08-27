@@ -22,6 +22,8 @@ I currently have 32 playlists and 550 liked music videos on YouTube, which adds 
 
 2. <b>Protect your music from becoming unavailable.</b><br>
 On YouTube anyone can upload their music and delete it just as easily. Today I have 80 deleted and 25 private videos, which is 10% of all my tracks. After a track is deleted or made private, you may not be able to retrieve any information to find what it was.
+<br><br>
+Some videos may not be available in your region (hidden songs in YouTube playlists or exclamation mark songs on YouTube Music), but you can still fetch them using the YouTube Data API and move to Spotify.
 
 
 ### Why Spotify?

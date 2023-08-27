@@ -236,6 +236,7 @@ def playlist_items_to_df(playlist_items: list[list[str]]) -> pd.DataFrame:
                                                               'channel_name',
                                                               'description',
                                                               'duration_ms'])
+    df_playlist_items['order_num'] = df_playlist_items.index
     return df_playlist_items
 
 
@@ -249,6 +250,7 @@ def liked_videos_to_df(liked_videos: dict[str, list[str]]) -> pd.DataFrame:
                                                       'description',
                                                       'duration_ms']) \
                                             .reset_index(names='video_id')
+    df_liked_videos['order_num'] = -(df_liked_videos.index+1)
     return df_liked_videos
 
 

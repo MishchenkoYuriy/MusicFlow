@@ -52,7 +52,8 @@ def unlike(album_uris: list) -> None:
 
 
 if __name__ == '__main__':
-    scope = ["user-library-read", "user-library-modify"]
+    # scope = ["user-library-read", "user-library-modify"]
+    scope = ["user-library-modify", "playlist-modify-private"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
     
     if os.getenv('REMOVE_AFTER'): 

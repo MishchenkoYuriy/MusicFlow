@@ -36,7 +36,8 @@ def remove(playlist_ids: list) -> None:
 
 
 if __name__ == '__main__':
-    scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
+    # scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
+    scope = ["user-library-modify", "playlist-modify-private"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
     playlist_ids = populate_playlist_ids()

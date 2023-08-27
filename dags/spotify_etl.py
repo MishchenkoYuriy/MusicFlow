@@ -59,7 +59,7 @@ def extract_videos() -> pd.DataFrame:
     LEFT JOIN `{project_id}.marts.youtube_playlists` p
     ON v.youtube_playlist_id = p.youtube_playlist_id
 
-    ORDER BY p.playlist_name, v.channel_name, v.title, v.duration_ms
+    ORDER BY v.order_num
     """ # WHERE v.duration_ms < {threshold_ms}
 
     df_videos = client.query(sql).to_dataframe()
