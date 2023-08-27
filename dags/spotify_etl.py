@@ -207,8 +207,8 @@ def find_album(row) -> dict:
         q = f'album "{row["title"]}"'
         album_info = qsearch_album(row, q=q, search_type_id='2', limit=2)
 
-    if not album_info:
-        print(f'Album "{row["title"]}" not found on Spotify')
+    # if not album_info:
+    #     print(f'Album "{row["title"]}" not found on Spotify')
     return album_info
 
 
@@ -237,12 +237,12 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
         
         percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
         
-        # Difference in 40 seconds or 70%+ tracks in the YouTube video description (only if the total number of tracks is objective)
+        # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
         if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
             print(f'Album "{row["title"]}" found on try {album_num}, '
                   f'difference: {round(diff / 1000)} seconds, '
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles '
-                  f'({round(percent_in_desc)}%) in the YouTube video description.')
+                  f'({round(percent_in_desc)}%) found in the YouTube video description.')
             
             return {
                 'album_uri': album['uri'],
@@ -269,12 +269,12 @@ def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> 
             sp.playlist_add_items(spotify_playlist_id, album_info['tracks_uri'])
 
             # Save the album to current user library
-            # sp.current_user_saved_albums_add([album['uri']])
+            # sp.current_user_saved_albums_add([album_info['album_uri']])
         
         else: # populate liked songs
 
             # Like all tracks in the album
-            # sp.current_user_saved_tracks_add(album_tracks_uri)
+            # sp.current_user_saved_tracks_add(album_info['tracks_uri'])
 
             # Save the album to current user library
             sp.current_user_saved_albums_add([album_info['album_uri']])
@@ -314,6 +314,127 @@ def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status:
                         status))
 
 
+def find_other_playlist(row) -> dict:
+    # First try, just video title
+    playlist_info = qsearch_playlist(row, q=row["title"], search_type_id='1', limit=2)
+
+    # Second try, playlist + space + playlist name in quotes
+    if not playlist_info:
+        q = f'playlist "{row["title"]}"'
+        playlist_info = qsearch_playlist(row, q=q, search_type_id='2', limit=2)
+    
+    # Third try, channel name + space + playlist title
+    if not playlist_info:
+        q = f'{row["channel_name"]} {row["title"]}'
+        playlist_info = qsearch_playlist(row, q=q, search_type_id='3', limit=2)
+
+    if not playlist_info:
+        print(f'Album/Playlist "{row["title"]}" not found on Spotify')
+    return playlist_info
+
+
+def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
+    playlists = sp.search(q=q, limit=limit, type='playlist')
+
+    for playlist_num, playlist in enumerate(playlists['playlists']['items']):
+        tracks_uri: list[str] = [] # track uri
+        tracks_info: list[tuple[str, str, int]] = [] # (track uri, track title, track duration ms)
+        diff = row['duration_ms']
+        tracks_in_desc = 0
+        playlist_length = 0
+        
+        tracks = sp.playlist(playlist['uri'])
+        for track in tracks['tracks']['items']:
+            if track['track']['name'].lower() in row['description']: # case-insensitive match
+                tracks_in_desc += 1
+            
+            tracks_uri.append(track['track']['uri'])
+            tracks_info.append((track['track']['uri'], track['track']['name'], track['track']['duration_ms']))
+            
+            playlist_length += track['track']['duration_ms']
+            diff -= track['track']['duration_ms']
+            if diff < -20000:
+                break
+        
+        percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a playlist are same with a diffrence in few tracks
+        
+        # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
+        if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
+            print(f'Playlist "{row["title"]}" found on try {playlist_num}, '
+                  f'difference: {round(diff / 1000)} seconds, '
+                  f'{tracks_in_desc} of {len(tracks_uri)} track titles '
+                  f'({round(percent_in_desc)}%) found in the YouTube video description.')
+            
+            return {
+                'playlist_uri': playlist['uri'],
+                'playlist_id': playlist['id'],
+                'tracks_uri': tracks_uri,
+                'tracks_info': tracks_info,
+                'playlist_title': playlist['name'],
+                'playlist_owner': playlist['owner']['display_name'],
+                'duration_ms': playlist_length,
+                'total_tracks': len(tracks_uri),
+                'found_on_try': playlist_num,
+                'difference_ms': abs(diff),
+                'tracks_in_desc': tracks_in_desc,
+                'q': q,
+                'search_type_id': search_type_id
+            }
+
+
+def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_title: str) -> str:
+    if (playlist_info['playlist_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+        status = 'saved'
+        if spotify_playlist_id: # populate current user playlists
+
+            # Add playlist tracks not present in the current user playlist to the current user playlist
+            sp.playlist_add_items(spotify_playlist_id, playlist_info['tracks_uri'])
+
+            # Save the playlist to current user library
+            # sp.current_user_follow_playlist(playlist_info['playlist_id'])
+        
+        else: # populate liked songs
+
+            # Like all tracks in the playlist
+            # sp.current_user_saved_tracks_add(playlist_info['tracks_uri'])
+
+            # Save the playlist to current user library
+            sp.current_user_follow_playlist(playlist_info['playlist_id'])
+
+    else:
+        status = 'skipped'
+        print(f'WARNING: Playlist "{video_title}" skipped (already exsist)')
+
+    return status
+
+
+def log_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+    spotify_playlists_others[playlist_info['playlist_uri']] = (playlist_info['playlist_title'],
+                                                               playlist_info['playlist_owner'],
+                                                               playlist_info['duration_ms'],
+                                                               playlist_info['total_tracks'])
+    
+    for track_uri, title, duration_ms in playlist_info['tracks_info']:
+        # if track_uri not in spotify_tracks: # condition doesn't matter
+        spotify_tracks[track_uri] = (playlist_info['playlist_uri'],
+                                     title,
+                                     # Same as album artists, not always correct,
+                                     # but we don't iterate for every artist on every track.
+                                     playlist_info['playlist_owner'], # TODO: fix
+                                     duration_ms)
+    
+    spotify_log.append((playlist_info['playlist_uri'],
+                        spotify_playlist_id,
+                        video_id,
+                        # 2, # uri_type
+                        playlist_info['found_on_try'],
+                        playlist_info['difference_ms'],
+                        playlist_info['tracks_in_desc'],
+                        playlist_info['q'],
+                        playlist_info['search_type_id'],
+                        status))
+
+
 def populate_spotify(row) -> None:
     """
     Find albums and tracks on Spotify, like or add them to the created playlists.
@@ -327,14 +448,19 @@ def populate_spotify(row) -> None:
     if row['playlist_name']:
         spotify_playlist_id = get_spotify_playlist_id(row)
 
-    # ALBUM
+    # ALBUM OR PLAYLIST
     # THRESHOLD_MS is specified and the duration of the video is greater than or equal to it
     if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
         album_info = find_album(row)
         if album_info:
             status = save_album(album_info, spotify_playlist_id, row['title'])
             log_album(album_info, spotify_playlist_id, row['video_id'], status)
-    
+        else:
+            playlist_info = find_other_playlist(row)
+            if playlist_info:
+                status = save_other_playlist(playlist_info, spotify_playlist_id, row['title'])
+                log_other_playlist(playlist_info, spotify_playlist_id, row['video_id'], status)
+
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
     else:
@@ -355,6 +481,19 @@ def spotify_albums_to_df(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
                                                         'total_tracks']) \
                                                 .reset_index(names='album_uri')
     return df_spotify_albums
+
+
+def spotify_playlists_others_to_df(spotify_playlists_others: dict[str, tuple[str]]) -> pd.DataFrame:
+    """
+    Return a spotify album dataframe from a album dictionary.
+    """
+    df_spotify_playlists_others = pd.DataFrame.from_dict(spotify_playlists_others, orient='index',
+                                                         columns=['playlist_title',
+                                                                  'playlist_owner',
+                                                                  'duration_ms',
+                                                                  'total_tracks']) \
+                                                        .reset_index(names='playlist_uri')
+    return df_spotify_playlists_others
 
 
 def spotify_tracks_to_df(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -421,6 +560,7 @@ if __name__ == '__main__':
 
     # Populate Spotify.
     spotify_albums: dict[str, tuple[str]] = {}
+    spotify_playlists_others: dict[str, tuple[str]] = {}
     spotify_tracks: dict[str, tuple[str]] = {}
     spotify_log: list[tuple[str]] = []
 
@@ -429,6 +569,10 @@ if __name__ == '__main__':
     df_spotify_albums = spotify_albums_to_df(spotify_albums)
     load_to_bigquery(df_spotify_albums, 'spotify_albums', 'replace')
     print(f'spotify_albums uploaded to BigQuery, {len(df_spotify_albums)} rows.')
+
+    df_spotify_playlists_others = spotify_playlists_others_to_df(spotify_playlists_others)
+    load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others', 'replace')
+    print(f'spotify_playlists_others uploaded to BigQuery, {len(df_spotify_playlists_others)} rows.')
 
     df_spotify_tracks = spotify_tracks_to_df(spotify_tracks)
     load_to_bigquery(df_spotify_tracks, 'spotify_tracks', 'replace')
