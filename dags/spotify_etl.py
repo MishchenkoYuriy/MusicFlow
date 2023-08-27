@@ -4,6 +4,8 @@ import pandas as pd
 from dotenv import load_dotenv
 import logging
 from youtube_etl import load_to_bigquery
+from spotify_unlike_tracks import populate_tracks_uri
+from spotify_unlike_albums import populate_albums_uri
 
 from google.cloud import bigquery
 
@@ -163,18 +165,23 @@ def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
             
 
 def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> str:
-    if (track_info['track_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+    if (track_info['track_uri'], spotify_playlist_id) in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+        status = 'skipped (exsist)'
+        print(f'WARNING: Track "{video_title}" skipped (already exsist)')
+
+    elif track_info['track_uri'] in liked_tracks_uri and not spotify_playlist_id:
+        status = 'skipped (liked)'
+        print(f'WARNING: Track "{video_title}" skipped (already liked)')
+    
+    else:
         status = 'saved'
-        if spotify_playlist_id: # populate playlists
+        if spotify_playlist_id:
             # Add the track to the playlist
             sp.playlist_add_items(spotify_playlist_id, [track_info['track_uri']])
         
-        else: # populate liked songs
+        else:
             # Like the track
             sp.current_user_saved_tracks_add([track_info['track_uri']])
-    else:
-        status = 'skipped'
-        print(f'WARNING: Track "{video_title}" skipped (already exsist)')
     
     return status
 
@@ -261,27 +268,29 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
 
 
 def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> str:
-    if (album_info['album_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
-        status = 'saved'
-        if spotify_playlist_id: # populate playlists
+    if (album_info['album_uri'], spotify_playlist_id) in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
+        status = 'skipped (exsist)'
+        print(f'WARNING: Album "{video_title}" skipped (already exsist)')
+    
+    elif album_info['album_uri'] in liked_albums_uri and not spotify_playlist_id:
+        status = 'skipped (liked)'
+        print(f'WARNING: Album "{video_title}" skipped (already liked)')
 
+    else:
+        status = 'saved'
+        if spotify_playlist_id:
             # Add album tracks not present in the playlist to the playlist
             sp.playlist_add_items(spotify_playlist_id, album_info['tracks_uri'])
 
             # Save the album to current user library
             # sp.current_user_saved_albums_add([album_info['album_uri']])
         
-        else: # populate liked songs
-
+        else:
             # Like all tracks in the album
             # sp.current_user_saved_tracks_add(album_info['tracks_uri'])
 
             # Save the album to current user library
             sp.current_user_saved_albums_add([album_info['album_uri']])
-
-    else:
-        status = 'skipped'
-        print(f'WARNING: Album "{video_title}" skipped (already exsist)')
 
     return status
 
@@ -385,16 +394,14 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
 def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_title: str) -> str:
     if (playlist_info['playlist_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
         status = 'saved'
-        if spotify_playlist_id: # populate current user playlists
-
+        if spotify_playlist_id:
             # Add playlist tracks not present in the current user playlist to the current user playlist
             sp.playlist_add_items(spotify_playlist_id, playlist_info['tracks_uri'])
 
             # Save the playlist to current user library
             # sp.current_user_follow_playlist(playlist_info['playlist_id'])
         
-        else: # populate liked songs
-
+        else:
             # Like all tracks in the playlist
             # sp.current_user_saved_tracks_add(playlist_info['tracks_uri'])
 
@@ -402,7 +409,7 @@ def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_tit
             sp.current_user_follow_playlist(playlist_info['playlist_id'])
 
     else:
-        status = 'skipped'
+        status = 'skipped (exsist)'
         print(f'WARNING: Playlist "{video_title}" skipped (already exsist)')
 
     return status
@@ -548,6 +555,15 @@ if __name__ == '__main__':
     # Authorisation.
     sp = get_authorization_code()
     user_id = get_user_id()
+
+    '''
+    Extract liked tracks and albums to prevent "overlike".
+    Without it, you will lose overliked tracks and albums by using spotify_unlike scripts
+    (the added_at field will be overwritten)
+    '''
+    liked_tracks_uri = populate_tracks_uri(sp)
+    liked_albums_uri = populate_albums_uri(sp)
+    print('Tracks and albums URI were collected.')
 
     # Create Spotify playlists.
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)

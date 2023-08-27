@@ -10,11 +10,11 @@ from spotipy.oauth2 import SpotifyOAuth
 load_dotenv()
 
 
-def populate_album_uris(remove_after: datetime = None) -> list:
+def populate_albums_uri(sp, remove_after: datetime = None) -> list:
     '''
-    Return a list of liked albums URIs for the current user.
+    Return a list of liked albums URI for the current user.
     '''
-    album_uris = []
+    albums_uri = []
 
     liked_albums = sp.current_user_saved_albums()
     next_liked = liked_albums['next']
@@ -23,7 +23,7 @@ def populate_album_uris(remove_after: datetime = None) -> list:
         added_at = datetime.strptime(album['added_at'], '%Y-%m-%dT%H:%M:%SZ')
         # if remove_after is None or album was added after remove_after
         if not remove_after or added_at > remove_after:
-            album_uris.append(album['album']['uri'])
+            albums_uri.append(album['album']['uri'])
 
     while next_liked:
         # extract offset from the url
@@ -34,18 +34,18 @@ def populate_album_uris(remove_after: datetime = None) -> list:
         for album in liked_albums['items']:
             added_at = datetime.strptime(album['added_at'], '%Y-%m-%dT%H:%M:%SZ')
             if not remove_after or added_at > remove_after:
-                album_uris.append(album['album']['uri'])
+                albums_uri.append(album['album']['uri'])
 
-    return album_uris
+    return albums_uri
 
 
-def unlike(album_uris: list) -> None:
+def unlike(sp, albums_uri: list) -> None:
     '''
-    Unlike all albums from the list of URIs. Split the liked albums into 50-size chunks
+    Unlike all albums from the list of albums URI. Split the liked albums into 50-size chunks
     and call current_user_saved_albums_delete on each one.
     current_user_saved_albums_delete has a limit of 50 albums
     '''
-    chunks = [album_uris[i:i + 50] for i in range(0, len(album_uris), 50)]
+    chunks = [albums_uri[i:i + 50] for i in range(0, len(albums_uri), 50)]
 
     for chunk in chunks:
         sp.current_user_saved_albums_delete(chunk)
@@ -58,10 +58,10 @@ if __name__ == '__main__':
     
     if os.getenv('REMOVE_AFTER'): 
         remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
-        album_uris = populate_album_uris(remove_after)
+        albums_uri = populate_albums_uri(sp, remove_after)
 
     else: # if REMOVE_AFTER is not specified, remove all liked albums
-        album_uris = populate_album_uris()
+        albums_uri = populate_albums_uri(sp)
 
-    unlike(album_uris)
-    print(f'{len(album_uris)} liked albums were removed')
+    unlike(sp, albums_uri)
+    print(f'{len(albums_uri)} liked albums were removed')
