@@ -8,10 +8,16 @@ models:
           tests:
             - unique
             - not_null
+            - relationships:
+                to: ref('stg__youtube_playlists')
+                field: youtube_playlist_id
         - name: spotify_playlist_id
           tests:
             - unique
             - not_null
+            - relationships:
+                to: ref('stg__spotify_playlists')
+                field: spotify_playlist_id
 
 
     - name: stg__search_types
@@ -61,6 +67,25 @@ models:
         - name: spotify_uri
           tests:
             - not_null
+            - relationships:
+                to: ref('stg__spotify_albums')
+                field: album_uri
+            - relationships:
+                to: ref('stg__spotify_tracks')
+                field: track_uri
+            - relationships:
+                to: ref('stg__spotify_playlists_others')
+                field: playlist_uri
+        - name: spotify_playlist_id
+          tests:
+            - relationships:
+                to: ref('stg__spotify_playlists')
+                field: spotify_playlist_id
+        - name: youtube_video_id
+          tests:
+            - relationships:
+                to: ref('stg__youtube_videos')
+                field: video_id
         - name: found_on_try
           tests:
             - not_null
@@ -82,6 +107,9 @@ models:
         - name: search_type_id
           tests:
             - not_null
+            - relationships:
+                to: ref('stg__search_types')
+                field: search_type_id
         - name: status
           tests:
             - not_null
@@ -133,6 +161,9 @@ models:
         - name: album_uri
           tests:
             - not_null
+            - relationships:
+                to: ref('stg__spotify_albums')
+                field: album_uri
         - name: track_title
           tests:
             - not_null
@@ -167,6 +198,11 @@ models:
         - name: video_id
           tests:
             - not_null
+        - name: youtube_playlist_id
+          tests:
+            - relationships:
+                to: ref('stg__youtube_playlists')
+                field: youtube_playlist_id
         - name: title
           tests:
             - not_null
