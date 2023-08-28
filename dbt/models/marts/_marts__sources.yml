@@ -1,0 +1,16 @@
+
+version: 2
+
+sources:
+  - name: marts_sources
+    schema: marts
+    tables:
+      - name: playlists_ids
+      - name: search_types
+      - name: spotify_albums
+      - name: spotify_log
+      - name: spotify_playlists
+      - name: spotify_playlists_others
+      - name: spotify_tracks
+      - name: youtube_playlists
+      - name: youtube_videos

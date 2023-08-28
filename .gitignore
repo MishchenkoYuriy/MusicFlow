@@ -4,6 +4,11 @@ reproduce_core.md
 dags/bigquery.py
 analysis/
 
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
 # airflow
 config/
 logs/

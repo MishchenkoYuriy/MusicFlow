@@ -1,0 +1,21 @@
+
+version: 2
+
+models:
+    - name: stg__playlists_ids
+
+    - name: stg__search_types
+
+    - name: stg__spotify_albums
+
+    - name: stg__spotify_log
+
+    - name: stg__spotify_playlists
+
+    - name: stg__spotify_playlists_others
+
+    - name: stg__spotify_tracks
+
+    - name: stg__youtube_playlists
+
+    - name: stg__youtube_videos
