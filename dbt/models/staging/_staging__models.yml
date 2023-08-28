@@ -3,19 +3,182 @@ version: 2
 
 models:
     - name: stg__playlists_ids
+      columns:
+        - name: youtube_playlist_id
+          tests:
+            - unique
+            - not_null
+        - name: spotify_playlist_id
+          tests:
+            - unique
+            - not_null
+
 
     - name: stg__search_types
+      columns:
+        - name: search_type_id
+          tests:
+            - unique
+            - not_null
+        - name: search_type_name
+          tests:
+            - not_null
+
 
     - name: stg__spotify_albums
+      columns:
+        - name: album_uri
+          tests:
+            - unique
+            - not_null
+        - name: album_title
+          tests:
+            - not_null
+        - name: album_artists
+          tests:
+            - not_null
+        - name: duration_ms
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 0"
+        - name: total_tracks
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 1"
+
 
     - name: stg__spotify_log
+      tests:
+        - dbt_utils.unique_combination_of_columns:
+            combination_of_columns:
+              - spotify_uri
+              - spotify_playlist_id 
+            where:
+              "status = 'saved'" # exclude skipped
+      columns:
+        - name: spotify_uri
+          tests:
+            - not_null
+        - name: found_on_try
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: ">= 0"
+            - dbt_utils.expression_is_true:
+                expression: "<= 1"
+        - name: difference_ms
+          tests:
+            - not_null
+        - name: tracks_in_desc
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: ">= 0"
+        - name: q
+          tests:
+            - not_null
+        - name: search_type_id
+          tests:
+            - not_null
+        - name: status
+          tests:
+            - not_null
+            - accepted_values:
+                values: ['saved', 'skipped (exists)', 'skipped (liked)']
+
 
     - name: stg__spotify_playlists
+      columns:
+        - name: spotify_playlist_id
+          tests:
+            - unique
+            - not_null
+        - name: playlist_name
+          tests:
+            - not_null
+
 
     - name: stg__spotify_playlists_others
+      columns:
+        - name: playlist_uri
+          tests:
+            - unique
+            - not_null
+        - name: playlist_title
+          tests:
+            - not_null
+        - name: playlist_owner
+          tests:
+            - not_null
+        - name: duration_ms
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 0"
+        - name: total_tracks
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 1"
+
 
     - name: stg__spotify_tracks
+      columns:
+        - name: track_uri
+          tests:
+            - unique
+            - not_null
+        - name: album_uri
+          tests:
+            - not_null
+        - name: track_title
+          tests:
+            - not_null
+        - name: track_artists
+          tests:
+            - not_null
+        - name: duration_ms
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 0"
+
 
     - name: stg__youtube_playlists
+      columns:
+        - name: youtube_playlist_id
+          tests:
+            - unique
+            - not_null
+        - name: playlist_name
+          tests:
+            - not_null
+
 
     - name: stg__youtube_videos
+      tests:
+        - dbt_utils.unique_combination_of_columns:
+            combination_of_columns:
+              - video_id
+              - youtube_playlist_id 
+      columns:
+        - name: video_id
+          tests:
+            - not_null
+        - name: title
+          tests:
+            - not_null
+        - name: channel_name
+          tests:
+            - not_null
+        - name: duration_ms
+          tests:
+            - not_null
+            - dbt_utils.expression_is_true:
+                expression: "> 0"
+        - name: order_num
+          tests:
+            - unique
+            - not_null
