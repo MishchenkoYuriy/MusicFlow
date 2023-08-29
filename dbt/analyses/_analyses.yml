@@ -1,0 +1,12 @@
+
+version: 2
+
+analyses:
+    - name: youtube_statistics
+      description: '{{ doc("youtube_statistics") }}'
+
+    - name: videos_saved_more_than_once
+      description: '{{ doc("videos_saved_more_than_once") }}'
+
+    - name: most_saved_channels
+      description: '{{ doc("most_saved_channels") }}'

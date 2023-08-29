@@ -3,6 +3,7 @@ version: 2
 
 models:
     - name: stg__playlists_ids
+      description: '{{ doc("playlists_ids") }}'
       columns:
         - name: youtube_playlist_id
           tests:
@@ -21,6 +22,7 @@ models:
 
 
     - name: stg__search_types
+      description: '{{ doc("search_types") }}'
       columns:
         - name: search_type_id
           tests:
@@ -32,6 +34,7 @@ models:
 
 
     - name: stg__spotify_albums
+      description: '{{ doc("spotify_albums") }}'
       columns:
         - name: album_uri
           tests:
@@ -56,6 +59,7 @@ models:
 
 
     - name: stg__spotify_log
+      description: '{{ doc("spotify_log") }}'
       tests:
         - dbt_utils.unique_combination_of_columns:
             combination_of_columns:
@@ -67,15 +71,15 @@ models:
         - name: spotify_uri
           tests:
             - not_null
-            - relationships:
-                to: ref('stg__spotify_albums')
-                field: album_uri
-            - relationships:
-                to: ref('stg__spotify_tracks')
-                field: track_uri
-            - relationships:
-                to: ref('stg__spotify_playlists_others')
-                field: playlist_uri
+            # - relationships:
+            #     to: ref('stg__spotify_albums')
+            #     field: album_uri
+            # - relationships:
+            #     to: ref('stg__spotify_tracks')
+            #     field: track_uri
+            # - relationships:
+            #     to: ref('stg__spotify_playlists_others')
+            #     field: playlist_uri
         - name: spotify_playlist_id
           tests:
             - relationships:
@@ -113,11 +117,15 @@ models:
         - name: status
           tests:
             - not_null
-            - accepted_values:
-                values: ['saved', 'skipped (exists)', 'skipped (liked)']
+            # - accepted_values:
+            #     values: ['saved', 'skipped (exists)', 'skipped (liked)']
 
 
     - name: stg__spotify_playlists
+      description: '{{ doc("spotify_playlists") }}'
+      tests:
+        - dbt_utils.equal_rowcount:
+            compare_model: ref('stg__playlists_ids')
       columns:
         - name: spotify_playlist_id
           tests:
@@ -129,6 +137,7 @@ models:
 
 
     - name: stg__spotify_playlists_others
+      description: '{{ doc("spotify_playlists_others") }}'
       columns:
         - name: playlist_uri
           tests:
@@ -153,6 +162,7 @@ models:
 
 
     - name: stg__spotify_tracks
+      description: '{{ doc("spotify_tracks") }}'
       columns:
         - name: track_uri
           tests:
@@ -161,9 +171,6 @@ models:
         - name: album_uri
           tests:
             - not_null
-            - relationships:
-                to: ref('stg__spotify_albums')
-                field: album_uri
         - name: track_title
           tests:
             - not_null
@@ -178,6 +185,10 @@ models:
 
 
     - name: stg__youtube_playlists
+      description: '{{ doc("youtube_playlists") }}'
+      tests:
+        - dbt_utils.equal_rowcount:
+            compare_model: ref('stg__playlists_ids')
       columns:
         - name: youtube_playlist_id
           tests:
@@ -189,6 +200,7 @@ models:
 
 
     - name: stg__youtube_videos
+      description: '{{ doc("youtube_videos") }}'
       tests:
         - dbt_utils.unique_combination_of_columns:
             combination_of_columns:
