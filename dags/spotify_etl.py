@@ -35,6 +35,7 @@ def extract_playlists() -> pd.DataFrame:
         playlist_name
     
     FROM `{project_id}.marts.youtube_playlists`
+    WHERE youtube_playlist_id != '0' -- remove Liked videos as a playlist
     ORDER BY playlist_name
     """
 
@@ -547,6 +548,28 @@ def create_df_search_types() -> pd.DataFrame:
     
     return df_search_types
 
+
+def create_df_spotify_playlists(df_playlists: pd.DataFrame) -> pd.DataFrame:
+    df_spotify_playlists = df_playlists[['spotify_playlist_id', 'playlist_name']]
+    liked = pd.DataFrame({'spotify_playlist_id': '0',
+                          'playlist_name': 'Liked'}, index = [0])
+    
+    df_spotify_playlists = pd.concat([df_spotify_playlists, liked], ignore_index=True)
+
+    return df_spotify_playlists
+
+
+def create_df_playlist_ids(df_playlists: pd.DataFrame) -> pd.DataFrame:
+    df_playlist_ids = df_playlists[['youtube_playlist_id', 'spotify_playlist_id']]
+    liked_videos = pd.DataFrame({'youtube_playlist_id': '0',
+                                 'spotify_playlist_id': '0'}, index = [0])
+
+    df_playlist_ids = pd.concat([df_playlist_ids, liked_videos], ignore_index=True)
+    df_playlist_ids = df_playlist_ids.reset_index(names='id')
+
+    return df_playlist_ids
+
+
 if __name__ == '__main__':
     # Extract dataframes from BigQuery.
     df_playlists = extract_playlists()
@@ -570,10 +593,13 @@ if __name__ == '__main__':
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
     print(f'{len(df_playlists)} playlists were added.')
 
-    load_to_bigquery(df_playlists[['spotify_playlist_id', 'playlist_name']], 'spotify_playlists', 'replace')
+    df_spotify_playlists = create_df_spotify_playlists(df_playlists)
+    load_to_bigquery(df_spotify_playlists, 'spotify_playlists', 'replace')
     print(f'spotify_playlists uploaded to BigQuery.')
-    load_to_bigquery(df_playlists[['youtube_playlist_id', 'spotify_playlist_id']], 'playlists_ids', 'replace')
-    print(f'playlists_ids uploaded to BigQuery.')
+
+    df_playlist_ids = create_df_playlist_ids(df_playlists)
+    load_to_bigquery(df_playlist_ids, 'playlist_ids', 'replace')
+    print(f'playlist_ids uploaded to BigQuery.')
 
     # Populate Spotify.
     spotify_albums: dict[str, tuple[str]] = {}

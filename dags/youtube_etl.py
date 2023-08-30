@@ -223,6 +223,12 @@ def playlists_to_df(playlists: dict[str, str]) -> pd.DataFrame:
     df_playlists = pd.DataFrame(playlists_series, 
                                 columns=['playlist_name']) \
                                .reset_index(names='youtube_playlist_id')
+    
+    liked_videos = pd.DataFrame({'youtube_playlist_id': '0',
+                                 'playlist_name': 'Liked videos'}, index = [0])
+    
+    df_playlists = pd.concat([df_playlists, liked_videos], ignore_index=True)
+
     return df_playlists
 
 
