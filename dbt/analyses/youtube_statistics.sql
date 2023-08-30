@@ -13,11 +13,11 @@ final as (
         case
         when youtube_playlist_id is not null then 'In playlists'
         when youtube_playlist_id is null then 'In liked videos'
-        end as location
+        end as section
 
 from {{ ref('stg__youtube_videos') }}
 
-group by video_type, location
+group by video_type, section
 
 )
 

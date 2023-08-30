@@ -1,0 +1,63 @@
+
+version: 2
+
+models:
+  - name: log_found_on_spotify
+    description: '{{ doc("log_found_on_spotify") }}'
+    tests:
+      - dbt_utils.equal_rowcount:
+          compare_model: ref('stg__spotify_log')
+      - dbt_utils.expression_is_true:
+          expression: "tracks_in_desc <= total_tracks"
+    columns:
+      - name: playlist_name
+        tests:
+          - not_null
+      - name: found
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['album', 'playlist', 'track']
+      - name: youtube_title
+        tests:
+          - not_null
+      - name: youtube_channel
+        tests:
+          - not_null
+      - name: spotify_title
+        tests:
+          - not_null
+      - name: spotify_artists
+        tests:
+          - not_null
+      - name: found_by
+        tests:
+          - not_null
+      - name: loop_num
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+      - name: tracks_in_desc
+        tests:
+          - not_null
+      - name: total_tracks
+        tests:
+          - not_null
+      - name: percentage_in_desc
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: "<= 100"
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: youtube_duration
+        tests:
+          - not_null
+      - name: spotify_duration
+        tests:
+          - not_null
+      - name: difference_sec
+        tests:
+          - not_null
