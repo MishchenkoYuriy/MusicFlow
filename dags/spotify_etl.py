@@ -355,24 +355,26 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
         
         tracks = sp.playlist(playlist['uri'])
         for track in tracks['tracks']['items']:
-            if track['track']['name'].lower() in row['description']: # case-insensitive match
-                tracks_in_desc += 1
-            
-            tracks_uri.append(track['track']['uri'])
-            tracks_info.append((track['track']['uri'], track['track']['name'], track['track']['duration_ms']))
-            
-            playlist_length += track['track']['duration_ms']
-            diff -= track['track']['duration_ms']
-            if diff < -20000:
-                break
-        
-        percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a playlist are same with a diffrence in few tracks
+            if track.get('track', ''):
+                if track['track']['name'].lower() in row['description']: # case-insensitive match
+                    tracks_in_desc += 1
+                
+                tracks_uri.append(track['track']['uri'])
+                tracks_info.append((track['track']['uri'], track['track']['name'], track['track']['duration_ms']))
+                
+                playlist_length += track['track']['duration_ms']
+                diff -= track['track']['duration_ms']
+                if diff < -20000:
+                    break
+
+        total_tracks = len(tracks_uri)
+        percent_in_desc = (tracks_in_desc / total_tracks) * 100 # in case a playlist are same with a diffrence in few tracks
         
         # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
-        if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
+        if (abs(diff) < 40000) or (total_tracks >= 4 and percent_in_desc >= 70):
             print(f'Playlist "{row["youtube_title"]}" found on try {playlist_num}, '
                   f'difference: {round(diff / 1000)} seconds, '
-                  f'{tracks_in_desc} of {len(tracks_uri)} track titles '
+                  f'{tracks_in_desc} of {total_tracks} track titles '
                   f'({round(percent_in_desc)}%) found in the YouTube video description.')
             
             return {
@@ -383,7 +385,7 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
                 'playlist_title': playlist['name'],
                 'playlist_owner': playlist['owner']['display_name'],
                 'duration_ms': playlist_length,
-                'total_tracks': len(tracks_uri),
+                'total_tracks': total_tracks,
                 'found_on_try': playlist_num,
                 'difference_ms': abs(diff),
                 'tracks_in_desc': tracks_in_desc,
