@@ -162,16 +162,16 @@ def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
                 'q': q,
                 'search_type_id': search_type_id
             }
-            
+
 
 def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> str:
     if (track_info['track_uri'], spotify_playlist_id) in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
-        status = 'skipped (exsist)'
-        print(f'WARNING: Track "{video_title}" skipped (already exsist)')
+        status = 'skipped (saved during the run)'
+        print(f'WARNING: Track "{video_title}" skipped (saved during the run)')
 
     elif track_info['track_uri'] in liked_tracks_uri and not spotify_playlist_id:
-        status = 'skipped (liked)'
-        print(f'WARNING: Track "{video_title}" skipped (already liked)')
+        status = 'skipped (saved before the run)'
+        print(f'WARNING: Track "{video_title}" skipped (saved before the run)')
     
     else:
         status = 'saved'
@@ -269,12 +269,12 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
 
 def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> str:
     if (album_info['album_uri'], spotify_playlist_id) in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
-        status = 'skipped (exsist)'
-        print(f'WARNING: Album "{video_title}" skipped (already exsist)')
+        status = 'skipped (saved during the run)'
+        print(f'WARNING: Album "{video_title}" skipped (saved during the run)')
     
     elif album_info['album_uri'] in liked_albums_uri and not spotify_playlist_id:
-        status = 'skipped (liked)'
-        print(f'WARNING: Album "{video_title}" skipped (already liked)')
+        status = 'skipped (saved before the run)'
+        print(f'WARNING: Album "{video_title}" skipped (saved before the run)')
 
     else:
         status = 'saved'
@@ -354,6 +354,7 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
         
         tracks = sp.playlist(playlist['uri'])
         for track in tracks['tracks']['items']:
+            print(track)
             if track['track']['name'].lower() in row['description']: # case-insensitive match
                 tracks_in_desc += 1
             
@@ -409,8 +410,8 @@ def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_tit
             sp.current_user_follow_playlist(playlist_info['playlist_id'])
 
     else:
-        status = 'skipped (exsist)'
-        print(f'WARNING: Playlist "{video_title}" skipped (already exsist)')
+        status = 'skipped (saved during the run)'
+        print(f'WARNING: Playlist "{video_title}" skipped (saved during the run)')
 
     return status
 

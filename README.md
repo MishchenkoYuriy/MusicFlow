@@ -83,4 +83,4 @@ This project may be bad to copy:
 - Classical music
 - Clips, live performances, covers, remixes and extended versions
 
-After running `spotify_etl.py` you can check how well the search engine did by pre-made SQL queries in `analysis/`. Read more about it [here](analysis/README.md).
+When the flow is finished, you can check how well the search engine has done by looking at the pre-made analyses in `dbt/analyses/` and views in `dbt/models/marts`. Read more about this in the dbt Docs.
