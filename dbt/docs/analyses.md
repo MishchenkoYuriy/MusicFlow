@@ -19,3 +19,9 @@ This analysis contains YouTube videos that are saved in multiple places, such as
 This analysis shows the YouTube channels and the number of their videos you have saved in `Liked videos` or your playlists.
 
 {% enddocs %}
+
+{% docs how_found_statistics %}
+
+This analysis shows the steps the search engine takes to find an album, playlist or track on Spotify, and how many records were found on each.
+
+{% enddocs %}

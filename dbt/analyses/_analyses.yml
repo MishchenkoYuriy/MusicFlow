@@ -10,3 +10,6 @@ analyses:
 
     - name: most_saved_channels
       description: '{{ doc("most_saved_channels") }}'
+
+    - name: how_found_statistics
+      description: '{{ doc("how_found_statistics") }}'
