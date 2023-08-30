@@ -200,7 +200,8 @@ def populate_liked_videos(response):
     for item in response['items']:
         iso8601_duration = item['contentDetails']['duration']
         duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
-        liked_videos[item['id']] = [item['snippet']['title'],
+        liked_videos[item['id']] = ['0', # id of Liked videos
+                                    item['snippet']['title'],
                                     item['snippet']['channelTitle'],
                                     item['snippet']['description'],
                                     duration_ms]
@@ -228,10 +229,10 @@ def playlists_to_df(playlists: dict[str, str]) -> pd.DataFrame:
                                 columns=['playlist_name']) \
                                .reset_index(names='youtube_playlist_id')
     
-    liked_videos = pd.DataFrame({'youtube_playlist_id': '0',
-                                 'playlist_name': 'Liked videos'}, index = [0])
+    liked = pd.DataFrame({'youtube_playlist_id': '0',
+                          'playlist_name': 'Liked videos'}, index = [0])
     
-    df_playlists = pd.concat([df_playlists, liked_videos], ignore_index=True)
+    df_playlists = pd.concat([df_playlists, liked], ignore_index=True)
 
     return df_playlists
 
@@ -242,8 +243,8 @@ def playlist_items_to_df(playlist_items: list[list[str]]) -> pd.DataFrame:
     """
     df_playlist_items = pd.DataFrame(playlist_items, columns=['video_id',
                                                               'youtube_playlist_id',
-                                                              'title',
-                                                              'channel_name',
+                                                              'youtube_title',
+                                                              'youtube_channel',
                                                               'description',
                                                               'duration_ms'])
     df_playlist_items['order_num'] = df_playlist_items.index
@@ -255,8 +256,9 @@ def liked_videos_to_df(liked_videos: dict[str, list[str]]) -> pd.DataFrame:
     Return a liked_videos dataframe from a liked_videos dictionary.
     """
     df_liked_videos = pd.DataFrame.from_dict(liked_videos, orient='index',
-                                             columns=['title',
-                                                      'channel_name',
+                                             columns=['youtube_playlist_id',
+                                                      'youtube_title',
+                                                      'youtube_channel',
                                                       'description',
                                                       'duration_ms']) \
                                             .reset_index(names='video_id')

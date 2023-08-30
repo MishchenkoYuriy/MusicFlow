@@ -52,8 +52,8 @@ def extract_videos() -> pd.DataFrame:
     SELECT
         v.video_id,
         p.playlist_name,
-        v.channel_name,
-        v.title,
+        v.youtube_channel,
+        v.youtube_title,
         lower(v.description) description,
         v.duration_ms
     
@@ -92,7 +92,7 @@ def create_spotify_playlists_from_df(row) -> str:
 def get_spotify_playlist_id(row) -> str:
     playlist = df_playlists[df_playlists['playlist_name'] == row['playlist_name']]
     if playlist.empty:
-        logging.info(f'Spotify id not found for playlist "{row["playlist_name"]}", video "{row["title"]}" skipped.')
+        logging.info(f'Spotify id not found for playlist "{row["playlist_name"]}", video "{row["youtube_title"]}" skipped.')
         return
     
     elif len(playlist) > 1:
@@ -102,32 +102,32 @@ def get_spotify_playlist_id(row) -> str:
 
 
 def find_track(row) -> dict:
-    # title = re.sub('&', 'and', row['title'])
+    # youtube_title = re.sub('&', 'and', row['youtube_title'])
 
     # First try, depends on whether it is a Topic Channel
-    if ' - Topic' in row['channel_name']:
-        artist = re.sub(' - Topic', '', row['channel_name'])
+    if ' - Topic' in row['youtube_channel']:
+        artist = re.sub(' - Topic', '', row['youtube_channel'])
         artist = re.sub('\'', ' ', artist)
 
-        q = f'track:{row["title"]} artist:{artist}'
+        q = f'track:{row["youtube_title"]} artist:{artist}'
         track_info = qsearch_track(row, q=q, search_type_id='0', limit=2)
     
     else:
-        track_info = qsearch_track(row, q=row['title'], search_type_id='1', limit=2)
+        track_info = qsearch_track(row, q=row['youtube_title'], search_type_id='1', limit=2)
 
     # Second try, track + space + track name in quotes
     if not track_info:
-        q = f'track "{row["title"]}"'
+        q = f'track "{row["youtube_title"]}"'
         track_info = qsearch_track(row, q=q, search_type_id='2', limit=2)
 
     # Third try, channel name + space + track title
     if not track_info:
-        artist = re.sub(' - Topic', '', row['channel_name'])
-        q = f'{artist} {row["title"]}'
+        artist = re.sub(' - Topic', '', row['youtube_channel'])
+        q = f'{artist} {row["youtube_title"]}'
         track_info = qsearch_track(row, q=q, search_type_id='3', limit=2)
 
     if not track_info:
-        print(f'Track "{row["title"]}" not found on Spotify')
+        print(f'Track "{row["youtube_title"]}" not found on Spotify')
     return track_info
 
 
@@ -140,15 +140,15 @@ def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
 
         for artist in track['artists']:
             artists.append(artist['name'])
-            if artist['name'].lower() in row["title"].lower(): # case-insensitive match
+            if artist['name'].lower() in row["youtube_title"].lower(): # case-insensitive match
                 artists_in_title += 1
         
-        if track['name'].lower() in row["title"].lower():
+        if track['name'].lower() in row["youtube_title"].lower():
             track_in_title = 1
 
         # Difference in 5 seconds or both track name and at least one artist presented in video title
         if diff <= 5000 or (track_in_title and artists_in_title):
-            print(f'Track "{row["title"]}" found on try: {track_num}, ' \
+            print(f'Track "{row["youtube_title"]}" found on try: {track_num}, ' \
                   f'difference: {round(diff / 1000)} seconds. ')
             
             return {
@@ -208,15 +208,15 @@ def log_track(track_info: dict, spotify_playlist_id: str, video_id: str, status:
 
 def find_album(row) -> dict:
     # First try, just video title
-    album_info = qsearch_album(row, q=row["title"], search_type_id='1', limit=2)
+    album_info = qsearch_album(row, q=row["youtube_title"], search_type_id='1', limit=2)
 
     # Second try, album + space + album name in quotes
     if not album_info:
-        q = f'album "{row["title"]}"'
+        q = f'album "{row["youtube_title"]}"'
         album_info = qsearch_album(row, q=q, search_type_id='2', limit=2)
 
     # if not album_info:
-    #     print(f'Album "{row["title"]}" not found on Spotify')
+    #     print(f'Album "{row["youtube_title"]}" not found on Spotify')
     return album_info
 
 
@@ -247,7 +247,7 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
         
         # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
         if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
-            print(f'Album "{row["title"]}" found on try {album_num}, '
+            print(f'Album "{row["youtube_title"]}" found on try {album_num}, '
                   f'difference: {round(diff / 1000)} seconds, '
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles '
                   f'({round(percent_in_desc)}%) found in the YouTube video description.')
@@ -326,20 +326,20 @@ def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status:
 
 def find_other_playlist(row) -> dict:
     # First try, just video title
-    playlist_info = qsearch_playlist(row, q=row["title"], search_type_id='1', limit=2)
+    playlist_info = qsearch_playlist(row, q=row["youtube_title"], search_type_id='1', limit=2)
 
     # Second try, playlist + space + playlist name in quotes
     if not playlist_info:
-        q = f'playlist "{row["title"]}"'
+        q = f'playlist "{row["youtube_title"]}"'
         playlist_info = qsearch_playlist(row, q=q, search_type_id='2', limit=2)
     
     # Third try, channel name + space + playlist title
     if not playlist_info:
-        q = f'{row["channel_name"]} {row["title"]}'
+        q = f'{row["youtube_channel"]} {row["youtube_title"]}'
         playlist_info = qsearch_playlist(row, q=q, search_type_id='3', limit=2)
 
     if not playlist_info:
-        print(f'Album/Playlist "{row["title"]}" not found on Spotify')
+        print(f'Album/Playlist "{row["youtube_title"]}" not found on Spotify')
     return playlist_info
 
 
@@ -355,7 +355,6 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
         
         tracks = sp.playlist(playlist['uri'])
         for track in tracks['tracks']['items']:
-            print(track)
             if track['track']['name'].lower() in row['description']: # case-insensitive match
                 tracks_in_desc += 1
             
@@ -371,7 +370,7 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
         
         # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
         if (abs(diff) < 40000) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
-            print(f'Playlist "{row["title"]}" found on try {playlist_num}, '
+            print(f'Playlist "{row["youtube_title"]}" found on try {playlist_num}, '
                   f'difference: {round(diff / 1000)} seconds, '
                   f'{tracks_in_desc} of {len(tracks_uri)} track titles '
                   f'({round(percent_in_desc)}%) found in the YouTube video description.')
@@ -462,12 +461,12 @@ def populate_spotify(row) -> None:
     if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
         album_info = find_album(row)
         if album_info:
-            status = save_album(album_info, spotify_playlist_id, row['title'])
+            status = save_album(album_info, spotify_playlist_id, row['youtube_title'])
             log_album(album_info, spotify_playlist_id, row['video_id'], status)
         else:
             playlist_info = find_other_playlist(row)
             if playlist_info:
-                status = save_other_playlist(playlist_info, spotify_playlist_id, row['title'])
+                status = save_other_playlist(playlist_info, spotify_playlist_id, row['youtube_title'])
                 log_other_playlist(playlist_info, spotify_playlist_id, row['video_id'], status)
 
     # TRACK
@@ -475,7 +474,7 @@ def populate_spotify(row) -> None:
     else:
         track_info = find_track(row)
         if track_info:
-            status = save_track(track_info, spotify_playlist_id, row['title'])
+            status = save_track(track_info, spotify_playlist_id, row['youtube_title'])
             log_track(track_info, spotify_playlist_id, row['video_id'], status)
 
 
