@@ -2,14 +2,21 @@
 version: 2
 
 models:
-  - name: log_found_on_spotify
-    description: '{{ doc("log_found_on_spotify") }}'
+  - name: log_found_videos
+    description: '{{ doc("log_found_videos") }}'
     tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - video_id
+            - spotify_playlist_id
       - dbt_utils.equal_rowcount:
           compare_model: ref('stg__spotify_log')
       - dbt_utils.expression_is_true:
           expression: "tracks_in_desc <= total_tracks"
     columns:
+      - name: video_id
+        tests:
+          - not_null
       - name: playlist_name
         tests:
           - not_null
@@ -59,5 +66,30 @@ models:
         tests:
           - not_null
       - name: difference_sec
+        tests:
+          - not_null
+
+
+  - name: log_not_found_videos
+    description: '{{ doc("log_not_found_videos") }}'
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - video_id
+            - youtube_playlist_id
+    columns:
+      - name: video_id
+        tests:
+          - not_null
+      - name: playlist_name
+        tests:
+          - not_null
+      - name: title
+        tests:
+          - not_null
+      - name: channel_name
+        tests:
+          - not_null
+      - name: duration_ms
         tests:
           - not_null

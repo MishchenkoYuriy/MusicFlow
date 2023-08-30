@@ -62,11 +62,18 @@ This table contains the videos presented in `Liked videos` or any of your playli
 
 {% enddocs %}
 
-{% docs log_found_on_spotify %}
+{% docs log_found_videos %}
 
 This model contains the found albums, playlists and tracks found on Spotify, the criteria used to find them, their status and the corresponding YouTube videos. This view can be used to analyse errors.
 
 {% enddocs %}
+
+{% docs log_not_found_videos %}
+
+This model contains your YouTube videos not found on Spotify.
+
+{% enddocs %}
+
 
 
 

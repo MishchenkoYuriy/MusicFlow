@@ -67,8 +67,12 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
+            - youtube_video_id
+            - spotify_playlist_id
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
             - spotify_uri
-            - spotify_playlist_id 
+            - spotify_playlist_id
           where:
             "status = 'saved'" # exclude skipped
     columns:
@@ -122,7 +126,7 @@ models:
         tests:
           - not_null
           # - accepted_values:
-          #     values: ['saved', 'skipped (exists)', 'skipped (liked)']
+          #     values: ['saved', 'skipped (saved before the run)', 'skipped (saved during the run)']
 
 
   - name: stg__spotify_playlists
