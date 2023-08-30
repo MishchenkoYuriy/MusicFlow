@@ -14,6 +14,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from google.cloud import bigquery
+from google.auth.exceptions import RefreshError
 
 # from datetime import datetime
 # from airflow import DAG
@@ -29,11 +30,15 @@ from google.cloud import bigquery
 load_dotenv()
 
 
-def get_new_credentials():
+def get_and_write_new_credentials():
     client_secrets_path = os.getenv('CLIENT_SECRETS_PATH')
     flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path,
                                                      scopes=["https://www.googleapis.com/auth/youtube.readonly"])
     credentials = flow.run_local_server(port=4040, authorization_prompt_message='')
+
+    # write new credentials to token.pickle
+    with open('token.pickle', 'wb') as f:
+        pickle.dump(credentials, f)
 
     return credentials
 
@@ -44,21 +49,20 @@ def get_valid_credentials():
     if os.path.exists('token.pickle'):
         with open('token.pickle', 'rb') as token:
             credentials = pickle.load(token)
-            logging.info("Credentials were pulled from a token.pickle")
-
-    if not credentials or not credentials.valid:
-        if credentials and credentials.expired and credentials.refresh_token: # credentials are expired
+    
+    if not credentials: # credentials not exist
+        credentials = get_and_write_new_credentials()
+        print("A refresh token has been created.")
+    
+    elif not credentials.valid:
+        try:
             credentials.refresh(Request())
-            logging.info("Credentials were refreshed")
 
-        else: # credentials not exist
-            credentials = get_new_credentials()
-            logging.info("New credentials were created")
-            
-            # write new credentials to token.pickle
-            with open('token.pickle', 'wb') as f:
-                pickle.dump(credentials, f)
-
+        except RefreshError:
+            os.unlink('token.pickle') # delete token.pickle
+            credentials = get_and_write_new_credentials()
+            print("The refresh token has been expired after 7 days. A new token has been generated.")
+        
     return credentials
 
 
