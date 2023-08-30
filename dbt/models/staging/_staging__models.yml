@@ -43,6 +43,7 @@ models:
           - unique
           - not_null
           - duration_match
+          - tracks_count_match
       - name: album_title
         tests:
           - not_null
@@ -147,6 +148,7 @@ models:
           - unique
           - not_null
           - duration_match
+          - tracks_count_match
       - name: playlist_title
         tests:
           - not_null
