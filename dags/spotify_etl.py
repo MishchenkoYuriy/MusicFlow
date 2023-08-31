@@ -12,15 +12,6 @@ from google.cloud import bigquery
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 
-# from datetime import datetime
-# from airflow import DAG
-# from airflow.operators.python import PythonOperator
-# from airflow.models import Variable
-
-
-# default_args = {
-#     'owner': 'spotify_client'
-# }
 
 load_dotenv()
 
@@ -188,8 +179,8 @@ def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> 
 
 
 def log_track(track_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
-    # if track['uri'] not in spotify_tracks: # condition doesn't matter
     spotify_tracks[track_info['track_uri']] = (track_info['album_uri'],
+                                               None,
                                                track_info['track_title'],
                                                track_info['track_artists'],
                                                track_info['duration_ms'])
@@ -287,7 +278,7 @@ def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> 
             # sp.current_user_saved_albums_add([album_info['album_uri']])
         
         else:
-            # Like all tracks in the album
+            # Like all tracks in the album (may cause overlike)
             # sp.current_user_saved_tracks_add(album_info['tracks_uri'])
 
             # Save the album to current user library
@@ -297,15 +288,14 @@ def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> 
 
 
 def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
-    # if album_info['album_uri'] not in spotify_albums:  # condition doesn't matter
     spotify_albums[album_info['album_uri']] = (album_info['album_title'],
                                                album_info['album_artists'],
                                                album_info['duration_ms'],
                                                album_info['total_tracks'])
     
     for track_uri, title, duration_ms in album_info['tracks_info']:
-        # if track_uri not in spotify_tracks: # condition doesn't matter
         spotify_tracks[track_uri] = (album_info['album_uri'],
+                                     None,
                                      title,
                                      # Same as album artists, not always correct,
                                      # but we don't iterate for every artist on every track.
@@ -360,7 +350,10 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
                     tracks_in_desc += 1
                 
                 tracks_uri.append(track['track']['uri'])
-                tracks_info.append((track['track']['uri'], track['track']['name'], track['track']['duration_ms']))
+                tracks_info.append((track['track']['uri'],
+                                    track['track']['name'],
+                                    track['track']['duration_ms'],
+                                    track['track']['album']['uri']))
                 
                 playlist_length += track['track']['duration_ms']
                 diff -= track['track']['duration_ms']
@@ -405,7 +398,7 @@ def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_tit
             # sp.current_user_follow_playlist(playlist_info['playlist_id'])
         
         else:
-            # Like all tracks in the playlist
+            # Like all tracks in the playlist (may cause overlike)
             # sp.current_user_saved_tracks_add(playlist_info['tracks_uri'])
 
             # Save the playlist to current user library
@@ -424,9 +417,9 @@ def log_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_id: 
                                                                playlist_info['duration_ms'],
                                                                playlist_info['total_tracks'])
     
-    for track_uri, title, duration_ms in playlist_info['tracks_info']:
-        # if track_uri not in spotify_tracks: # condition doesn't matter
-        spotify_tracks[track_uri] = (playlist_info['playlist_uri'],
+    for track_uri, title, duration_ms, album_uri in playlist_info['tracks_info']:
+        spotify_tracks[track_uri] = (album_uri,
+                                     playlist_info['playlist_uri'],
                                      title,
                                      # Same as album artists, not always correct,
                                      # but we don't iterate for every artist on every track.
@@ -480,7 +473,7 @@ def populate_spotify(row) -> None:
             log_track(track_info, spotify_playlist_id, row['video_id'], status)
 
 
-def spotify_albums_to_df(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
+def create_df_spotify_albums(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify album dataframe from a album dictionary.
     """
@@ -493,7 +486,7 @@ def spotify_albums_to_df(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
     return df_spotify_albums
 
 
-def spotify_playlists_others_to_df(spotify_playlists_others: dict[str, tuple[str]]) -> pd.DataFrame:
+def create_df_spotify_playlists_others(spotify_playlists_others: dict[str, tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify album dataframe from a album dictionary.
     """
@@ -506,12 +499,13 @@ def spotify_playlists_others_to_df(spotify_playlists_others: dict[str, tuple[str
     return df_spotify_playlists_others
 
 
-def spotify_tracks_to_df(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
+def create_df_spotify_tracks(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify track dataframe from a track dictionary.
     """
     df_spotify_tracks = pd.DataFrame.from_dict(spotify_tracks, orient='index',
                                                columns=['album_uri',
+                                                        'playlist_uri',
                                                         'track_title',
                                                         'track_artists',
                                                         'duration_ms']) \
@@ -519,7 +513,7 @@ def spotify_tracks_to_df(spotify_tracks: dict[str, tuple[str]]) -> pd.DataFrame:
     return df_spotify_tracks
 
 
-def spotify_log_to_df(spotify_log: list[tuple[str]]) -> pd.DataFrame:
+def create_df_spotify_log(spotify_log: list[tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify log dataframe from a log list.
     """
@@ -610,19 +604,19 @@ if __name__ == '__main__':
 
     df_videos.apply(populate_spotify, axis = 1)
 
-    df_spotify_albums = spotify_albums_to_df(spotify_albums)
+    df_spotify_albums = create_df_spotify_albums(spotify_albums)
     load_to_bigquery(df_spotify_albums, 'spotify_albums', 'replace')
     print(f'spotify_albums uploaded to BigQuery, {len(df_spotify_albums)} rows.')
 
-    df_spotify_playlists_others = spotify_playlists_others_to_df(spotify_playlists_others)
+    df_spotify_playlists_others = create_df_spotify_playlists_others(spotify_playlists_others)
     load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others', 'replace')
     print(f'spotify_playlists_others uploaded to BigQuery, {len(df_spotify_playlists_others)} rows.')
 
-    df_spotify_tracks = spotify_tracks_to_df(spotify_tracks)
+    df_spotify_tracks = create_df_spotify_tracks(spotify_tracks)
     load_to_bigquery(df_spotify_tracks, 'spotify_tracks', 'replace')
     print(f'spotify_tracks uploaded to BigQuery, {len(df_spotify_tracks)} rows.')
 
-    df_spotify_log = spotify_log_to_df(spotify_log)
+    df_spotify_log = create_df_spotify_log(spotify_log)
     load_to_bigquery(df_spotify_log, 'spotify_log', 'replace')
     print(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
 
@@ -630,21 +624,3 @@ if __name__ == '__main__':
     df_search_types = create_df_search_types()
     load_to_bigquery(df_search_types, 'search_types', 'replace')
     print(f'search_types uploaded to BigQuery.')
-
-
-# with DAG(
-#     dag_id='request_access_token',
-#     default_args=default_args,
-#     description='Spotify DAG',
-#     start_date=datetime(2023, 8, 11),
-#     schedule='@hourly', # None
-#     catchup=False,
-# ) as dag:
-    
-#     request_access_token_task = PythonOperator(
-#         task_id = 'request_access_token_task',
-#         python_callable=request_access_token
-#     )
-    
-    
-#     request_access_token_task

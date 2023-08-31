@@ -9,7 +9,7 @@ YouTube | | Spotify
 Liked videos (tracks) | &rarr; | Liked songs
 Liked videos (albums) | &rarr; | Saved albums in your Library
 Liked videos (playlists) | &rarr; | Saved playlists in your Library
-Your created playlists | &rarr; | Private, non-collaborative playlists
+Your playlists | &rarr; | Private, non-collaborative playlists
 
 ❕ On YouTube albums and playlists can be presented as single long videos (usually unofficial) or as an a set of videos. This project does not copy the latter, which are created by other users and saved in your Library (YouTube Data API does not provide methods for working with the data).
 
