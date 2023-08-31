@@ -9,7 +9,10 @@ YouTube | | Spotify
 Liked videos (tracks) | &rarr; | Liked songs
 Liked videos (albums) | &rarr; | Saved albums in your Library
 Liked videos (playlists) | &rarr; | Saved playlists in your Library
-Your playlists | &rarr; | Private, non-collaborative playlists
+Your playlists | &rarr; | Private*, non-collaborative playlists
+
+\* Spotify playlists actually have three options: public (listed on your profile), public (not listed on your profile, but accessible via link) and private (not listed on your profile, not accessible via link). The Spotify API only provides options to create the first and second playlists. Once your playlists have been created you will see 'Public Playlist' above the playlist name, which means the second option. For more information, read this [thread](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).<br>
+You can manually make a playlist private by following these steps: Open the playlist, click the three dots icon (...) at the top of the playlist (or right-click the playlist), and select Make private.
 
 ❕ On YouTube albums and playlists can be presented as single long videos (usually unofficial) or as an a set of videos. This project does not copy the latter, which are created by other users and saved in your Library (YouTube Data API does not provide methods for working with the data).
 
