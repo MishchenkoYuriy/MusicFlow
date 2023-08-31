@@ -24,9 +24,11 @@ clean-targets:
 
 models:
   music_flow:
-    marts:
-      +materialized: table
-      +schema: marts
     staging:
       +materialized: view
       +schema: staging
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table
+      +schema: marts
