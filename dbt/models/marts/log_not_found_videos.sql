@@ -10,14 +10,14 @@ join_playlist_ids as (
         p.spotify_playlist_id,
 
         coalesce(yp.playlist_name, 'Liked videos') as playlist_name,
-        yv.title,
-        yv.channel_name,
+        yv.youtube_title,
+        yv.youtube_channel,
         yv.duration_ms
     
     from {{ ref('stg__youtube_videos') }} yv
     -- left joins because of nulls in youtube_playlist_id ('Liked videos') 
     left join {{ ref('stg__youtube_playlists') }} yp on yv.youtube_playlist_id = yp.youtube_playlist_id
-    left join {{ ref('stg__playlists_ids') }} p on yv.youtube_playlist_id = p.youtube_playlist_id
+    left join {{ ref('stg__playlist_ids') }} p on yv.youtube_playlist_id = p.youtube_playlist_id
 
 ),
 
@@ -28,8 +28,8 @@ final as (
         yv.youtube_playlist_id,
 
         yv.playlist_name,
-        yv.title,
-        yv.channel_name,
+        yv.youtube_title,
+        yv.youtube_channel,
         yv.duration_ms
     
     from join_playlist_ids yv
@@ -40,7 +40,7 @@ final as (
 
     where sl.spotify_uri is null -- not found
 
-    order by yv.youtube_playlist_id, yv.title
+    order by yv.youtube_playlist_id, yv.youtube_title
 
 )
 

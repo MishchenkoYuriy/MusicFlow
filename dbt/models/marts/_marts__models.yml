@@ -12,6 +12,7 @@ models:
       - dbt_utils.equal_rowcount:
           compare_model: ref('stg__spotify_log')
       - dbt_utils.expression_is_true:
+          name: tracks_in_desc_less_than_or_equal_to_total_tracks
           expression: "tracks_in_desc <= total_tracks"
     columns:
       - name: video_id
@@ -56,8 +57,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: percentage_less_than_or_equal_to_100
               expression: "<= 100"
           - dbt_utils.expression_is_true:
+              name: percentage_greater_than_or_equal_to_0
               expression: ">= 0"
       - name: youtube_duration
         tests:
@@ -84,10 +87,10 @@ models:
       - name: playlist_name
         tests:
           - not_null
-      - name: title
+      - name: youtube_title
         tests:
           - not_null
-      - name: channel_name
+      - name: youtube_channel
         tests:
           - not_null
       - name: duration_ms

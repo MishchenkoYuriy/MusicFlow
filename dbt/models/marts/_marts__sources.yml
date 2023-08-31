@@ -5,8 +5,8 @@ sources:
   - name: marts_sources
     schema: marts
     tables:
-      - name: playlists_ids
-        description: '{{ doc("playlists_ids") }}'
+      - name: playlist_ids
+        description: '{{ doc("playlist_ids") }}'
       - name: search_types
         description: '{{ doc("search_types") }}'
       - name: spotify_albums

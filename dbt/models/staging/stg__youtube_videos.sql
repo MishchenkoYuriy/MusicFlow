@@ -7,8 +7,8 @@ final as (
     select
         video_id,
         youtube_playlist_id,
-        title,
-        channel_name,
+        youtube_title,
+        youtube_channel,
         description,
         duration_ms,
         order_num

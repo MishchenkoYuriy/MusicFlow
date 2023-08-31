@@ -1,4 +1,4 @@
-{% docs playlists_ids %}
+{% docs playlist_ids %}
 
 A mapping table between `youtube_playlists` and `spotify_playlists` by playlist ids (one-to-one relationship).
 

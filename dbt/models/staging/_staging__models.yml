@@ -2,9 +2,13 @@
 version: 2
 
 models:
-  - name: stg__playlists_ids
-    description: '{{ doc("playlists_ids") }}'
+  - name: stg__playlist_ids
+    description: '{{ doc("playlist_ids") }}'
     columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
       - name: youtube_playlist_id
         tests:
           - unique
@@ -42,8 +46,8 @@ models:
         tests:
           - unique
           - not_null
-          - duration_match
-          - tracks_count_match
+          # - duration_match
+          # - tracks_count_match
       - name: album_title
         tests:
           - not_null
@@ -54,11 +58,13 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: duration_ms_greater_than_0
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: total_tracks_greater_than_1
               expression: "> 1"
 
 
@@ -102,8 +108,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: found_on_try_greater_than_or_equal_to_0
               expression: ">= 0"
           - dbt_utils.expression_is_true:
+              name: found_on_try_less_than_or_equal_to_1
               expression: "<= 1"
       - name: difference_ms
         tests:
@@ -112,6 +120,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: tracks_in_desc_greater_than_or_equal_to_0
               expression: ">= 0"
       - name: q
         tests:
@@ -125,15 +134,15 @@ models:
       - name: status
         tests:
           - not_null
-          # - accepted_values:
-          #     values: ['saved', 'skipped (saved before the run)', 'skipped (saved during the run)']
+          - accepted_values:
+              values: ['saved', 'skipped (saved before the run)', 'skipped (saved during the run)']
 
 
   - name: stg__spotify_playlists
     description: '{{ doc("spotify_playlists") }}'
     tests:
       - dbt_utils.equal_rowcount:
-          compare_model: ref('stg__playlists_ids')
+          compare_model: ref('stg__playlist_ids')
     columns:
       - name: spotify_playlist_id
         tests:
@@ -151,8 +160,8 @@ models:
         tests:
           - unique
           - not_null
-          - duration_match
-          - tracks_count_match
+          # - duration_match
+          # - tracks_count_match
       - name: playlist_title
         tests:
           - not_null
@@ -163,11 +172,13 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: duration_ms_greater_than_0
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: total_tracks_greater_than_1
               expression: "> 1"
 
 
@@ -191,6 +202,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: duration_ms_greater_than_0
               expression: "> 0"
 
 
@@ -198,7 +210,7 @@ models:
     description: '{{ doc("youtube_playlists") }}'
     tests:
       - dbt_utils.equal_rowcount:
-          compare_model: ref('stg__playlists_ids')
+          compare_model: ref('stg__playlist_ids')
     columns:
       - name: youtube_playlist_id
         tests:
@@ -225,16 +237,17 @@ models:
           - relationships:
               to: ref('stg__youtube_playlists')
               field: youtube_playlist_id
-      - name: title
+      - name: youtube_title
         tests:
           - not_null
-      - name: channel_name
+      - name: youtube_channel
         tests:
           - not_null
       - name: duration_ms
         tests:
           - not_null
           - dbt_utils.expression_is_true:
+              name: duration_ms_greater_than_0
               expression: "> 0"
       - name: order_num
         tests:

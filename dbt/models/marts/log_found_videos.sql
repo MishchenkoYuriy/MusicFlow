@@ -6,8 +6,8 @@ distinct_videos as (
 
     select
         distinct video_id,
-        title,
-        channel_name,
+        youtube_title,
+        youtube_channel,
         description,
         duration_ms
     
@@ -28,8 +28,8 @@ join_spotify_uris as (
             when st.track_uri is not null then 'track'
         end as found,
 
-        yv.title as youtube_title,
-        yv.channel_name,
+        yv.youtube_title,
+        yv.youtube_channel,
         yv.description,
 
         coalesce(sa.album_title, spo.playlist_title, st.track_title) as spotify_title, 
@@ -71,7 +71,7 @@ final as (
         found,
 
         youtube_title,
-        channel_name as youtube_channel,
+        youtube_channel,
         description,
         spotify_title,
         spotify_artists,
