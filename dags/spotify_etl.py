@@ -26,7 +26,6 @@ def extract_playlists() -> pd.DataFrame:
         playlist_name
     
     FROM `{project_id}.marts.youtube_playlists`
-    WHERE youtube_playlist_id != '0' -- remove Liked videos as a playlist
     ORDER BY playlist_name
     """
 
@@ -41,20 +40,21 @@ def extract_videos() -> pd.DataFrame:
 
     sql = f"""
     SELECT
-        v.video_id,
-        p.playlist_name,
-        v.youtube_channel,
-        v.youtube_title,
-        lower(v.description) description,
-        v.duration_ms
+        yl.id as log_id,
+        yp.playlist_name,
+
+        yv.youtube_title,
+        yv.youtube_channel,
+        lower(yv.description) description,
+        yv.duration_ms
     
-    FROM `{project_id}.marts.youtube_videos` v
+    FROM `{project_id}.marts.youtube_library` yl
 
-    LEFT JOIN `{project_id}.marts.youtube_playlists` p
-    ON v.youtube_playlist_id = p.youtube_playlist_id
+    INNER JOIN `{project_id}.marts.youtube_playlists` yp ON yl.youtube_playlist_id = yp.youtube_playlist_id 
+    INNER JOIN `{project_id}.marts.youtube_videos` yv ON yl.video_id = yv.video_id
 
-    ORDER BY v.order_num
-    """ # WHERE v.duration_ms < {threshold_ms}
+    ORDER BY yl.id
+    """ # WHERE yv.duration_ms < {threshold_ms}
 
     df_videos = client.query(sql).to_dataframe()
     return df_videos
@@ -76,8 +76,11 @@ def create_spotify_playlists_from_df(row) -> str:
     Create private, non-collaborative Spotify playlists from the dataframe.
     Save created playlist ids as a column in the original dataframe.
     """
-    playlist = sp.user_playlist_create(user_id, row['playlist_name'], public=False, collaborative=False)
-    return playlist['id']
+    if row['youtube_playlist_id'] != '0':
+        playlist = sp.user_playlist_create(user_id, row['playlist_name'], public=False, collaborative=False)
+        return playlist['id']
+    else:
+        return '0'
 
 
 def get_spotify_playlist_id(row) -> str:
@@ -161,13 +164,13 @@ def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> 
         status = 'skipped (saved during the run)'
         print(f'WARNING: Track "{video_title}" skipped (saved during the run)')
 
-    elif track_info['track_uri'] in liked_tracks_uri and not spotify_playlist_id:
+    elif track_info['track_uri'] in liked_tracks_uri and spotify_playlist_id == '0':
         status = 'skipped (saved before the run)'
         print(f'WARNING: Track "{video_title}" skipped (saved before the run)')
     
     else:
         status = 'saved'
-        if spotify_playlist_id:
+        if spotify_playlist_id != '0':
             # Add the track to the playlist
             sp.playlist_add_items(spotify_playlist_id, [track_info['track_uri']])
         
@@ -178,16 +181,16 @@ def save_track(track_info: dict, spotify_playlist_id: str, video_title: str) -> 
     return status
 
 
-def log_track(track_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+def log_track(track_info: dict, spotify_playlist_id: str, log_id: str, status: str) -> None:
     spotify_tracks[track_info['track_uri']] = (track_info['album_uri'],
                                                None,
                                                track_info['track_title'],
                                                track_info['track_artists'],
                                                track_info['duration_ms'])
     
-    spotify_log.append((track_info['track_uri'],
+    spotify_log.append((log_id,
+                        track_info['track_uri'],
                         spotify_playlist_id,
-                        video_id,
                         # 1, # uri_type
                         track_info['found_on_try'],
                         track_info['difference_ms'],
@@ -264,13 +267,13 @@ def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> 
         status = 'skipped (saved during the run)'
         print(f'WARNING: Album "{video_title}" skipped (saved during the run)')
     
-    elif album_info['album_uri'] in liked_albums_uri and not spotify_playlist_id:
+    elif album_info['album_uri'] in liked_albums_uri and spotify_playlist_id == '0':
         status = 'skipped (saved before the run)'
         print(f'WARNING: Album "{video_title}" skipped (saved before the run)')
 
     else:
         status = 'saved'
-        if spotify_playlist_id:
+        if spotify_playlist_id != '0':
             # Add album tracks not present in the playlist to the playlist
             sp.playlist_add_items(spotify_playlist_id, album_info['tracks_uri'])
 
@@ -287,7 +290,7 @@ def save_album(album_info: dict, spotify_playlist_id: str, video_title: str) -> 
     return status
 
 
-def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+def log_album(album_info: dict, spotify_playlist_id: str, log_id: str, status: str) -> None:
     spotify_albums[album_info['album_uri']] = (album_info['album_title'],
                                                album_info['album_artists'],
                                                album_info['duration_ms'],
@@ -302,9 +305,9 @@ def log_album(album_info: dict, spotify_playlist_id: str, video_id: str, status:
                                      album_info['album_artists'], 
                                      duration_ms)
     
-    spotify_log.append((album_info['album_uri'],
+    spotify_log.append((log_id,
+                        album_info['album_uri'],
                         spotify_playlist_id,
-                        video_id,
                         # 0, # uri_type
                         album_info['found_on_try'],
                         album_info['difference_ms'],
@@ -390,7 +393,7 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
 def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_title: str) -> str:
     if (playlist_info['playlist_uri'], spotify_playlist_id) not in ((uri, playlist_id) for uri, playlist_id, *_ in spotify_log): # search with primary key
         status = 'saved'
-        if spotify_playlist_id:
+        if spotify_playlist_id != '0':
             # Add playlist tracks not present in the current user playlist to the current user playlist
             sp.playlist_add_items(spotify_playlist_id, playlist_info['tracks_uri'])
 
@@ -411,7 +414,7 @@ def save_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_tit
     return status
 
 
-def log_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_id: str, status: str) -> None:
+def log_other_playlist(playlist_info: dict, spotify_playlist_id: str, log_id: str, status: str) -> None:
     spotify_playlists_others[playlist_info['playlist_uri']] = (playlist_info['playlist_title'],
                                                                playlist_info['playlist_owner'],
                                                                playlist_info['duration_ms'],
@@ -426,9 +429,9 @@ def log_other_playlist(playlist_info: dict, spotify_playlist_id: str, video_id: 
                                      playlist_info['playlist_owner'], # TODO: fix
                                      duration_ms)
     
-    spotify_log.append((playlist_info['playlist_uri'],
+    spotify_log.append((log_id,
+                        playlist_info['playlist_uri'],
                         spotify_playlist_id,
-                        video_id,
                         # 2, # uri_type
                         playlist_info['found_on_try'],
                         playlist_info['difference_ms'],
@@ -447,9 +450,7 @@ def populate_spotify(row) -> None:
         If the first video is not found and populate_playlists returns None,
         df_spotify_catalog will be a Series.
     """
-    spotify_playlist_id = None
-    if row['playlist_name']:
-        spotify_playlist_id = get_spotify_playlist_id(row)
+    spotify_playlist_id = get_spotify_playlist_id(row)
 
     # ALBUM OR PLAYLIST
     # THRESHOLD_MS is specified and the duration of the video is greater than or equal to it
@@ -457,12 +458,12 @@ def populate_spotify(row) -> None:
         album_info = find_album(row)
         if album_info:
             status = save_album(album_info, spotify_playlist_id, row['youtube_title'])
-            log_album(album_info, spotify_playlist_id, row['video_id'], status)
+            log_album(album_info, spotify_playlist_id, row['log_id'], status)
         else:
             playlist_info = find_other_playlist(row)
             if playlist_info:
                 status = save_other_playlist(playlist_info, spotify_playlist_id, row['youtube_title'])
-                log_other_playlist(playlist_info, spotify_playlist_id, row['video_id'], status)
+                log_other_playlist(playlist_info, spotify_playlist_id, row['log_id'], status)
 
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
@@ -470,7 +471,7 @@ def populate_spotify(row) -> None:
         track_info = find_track(row)
         if track_info:
             status = save_track(track_info, spotify_playlist_id, row['youtube_title'])
-            log_track(track_info, spotify_playlist_id, row['video_id'], status)
+            log_track(track_info, spotify_playlist_id, row['log_id'], status)
 
 
 def create_df_spotify_albums(spotify_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -517,9 +518,9 @@ def create_df_spotify_log(spotify_log: list[tuple[str]]) -> pd.DataFrame:
     """
     Return a spotify log dataframe from a log list.
     """
-    df_spotify_log = pd.DataFrame(spotify_log, columns=['spotify_uri',
+    df_spotify_log = pd.DataFrame(spotify_log, columns=['log_id',
+                                                        'spotify_uri',
                                                         'spotify_playlist_id',
-                                                        'youtube_video_id',
                                                         # 'uri_type',
                                                         'found_on_try',
                                                         'difference_ms',
@@ -546,21 +547,12 @@ def create_df_search_types() -> pd.DataFrame:
 
 def create_df_spotify_playlists(df_playlists: pd.DataFrame) -> pd.DataFrame:
     df_spotify_playlists = df_playlists[['spotify_playlist_id', 'playlist_name']]
-    liked = pd.DataFrame({'spotify_playlist_id': '0',
-                          'playlist_name': 'Liked'}, index = [0])
-    
-    df_spotify_playlists = pd.concat([df_spotify_playlists, liked], ignore_index=True)
 
     return df_spotify_playlists
 
 
 def create_df_playlist_ids(df_playlists: pd.DataFrame) -> pd.DataFrame:
-    df_playlist_ids = df_playlists[['youtube_playlist_id', 'spotify_playlist_id']]
-    liked_videos = pd.DataFrame({'youtube_playlist_id': '0',
-                                 'spotify_playlist_id': '0'}, index = [0])
-
-    df_playlist_ids = pd.concat([df_playlist_ids, liked_videos], ignore_index=True)
-    df_playlist_ids = df_playlist_ids.reset_index(names='id')
+    df_playlist_ids = df_playlists[['youtube_playlist_id', 'spotify_playlist_id']].reset_index(names='id')
 
     return df_playlist_ids
 
