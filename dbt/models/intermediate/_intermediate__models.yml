@@ -2,4 +2,4 @@
 version: 2
 
 models:
-  - name: join_spotify_uris
+  - name: int_join_spotify_uris

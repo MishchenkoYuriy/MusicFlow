@@ -2,6 +2,9 @@
 version: 2
 
 analyses:
+
+    # YouTube
+
     - name: youtube_statistics
       description: '{{ doc("youtube_statistics") }}'
 
@@ -11,5 +14,10 @@ analyses:
     - name: most_saved_channels
       description: '{{ doc("most_saved_channels") }}'
 
+    # Spotify
+
     - name: how_found_statistics
       description: '{{ doc("how_found_statistics") }}'
+
+    - name: found_same_entry
+      description: '{{ doc("found_same_entry") }}'

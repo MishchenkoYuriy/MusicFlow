@@ -32,7 +32,7 @@ final as (
         round(cast(difference_ms as int) / 1000, 1) as difference_sec
         
 
-    from {{ ref('join_spotify_uris') }}
+    from {{ ref('int_join_spotify_uris') }}
 
     order by playlist_name, found, loop_num, found_by
     --order by difference_sec desc, found_by

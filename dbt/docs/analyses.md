@@ -25,3 +25,9 @@ This analysis shows the YouTube channels and the number of their videos you have
 This analysis shows the steps the search engine takes to find an album, playlist or track on Spotify, and how many records were found on each.
 
 {% enddocs %}
+
+{% docs found_same_entry %}
+
+Each record represents a Spotify album, playlist or track that was found from multiple YouTube videos. The analysis can be used to checks for duplicate videos.
+
+{% enddocs %}

@@ -6,7 +6,6 @@ distinct_videos as (
 
     select
         distinct video_id,
-        youtube_playlist_id,
         youtube_title,
         youtube_channel,
         description,
@@ -31,12 +30,10 @@ final as (
 
         /* youtube_videos */
         yv.video_id,
-        yv.youtube_playlist_id,
         yv.youtube_title,
         yv.youtube_channel,
         yv.description,
         yv.duration_ms as youtube_duration,
-        --yv.order_num,
 
         /* others */
         sp.playlist_name as playlist_name,
