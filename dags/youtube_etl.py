@@ -16,16 +16,6 @@ from googleapiclient.discovery import build
 from google.cloud import bigquery
 from google.auth.exceptions import RefreshError
 
-# from datetime import datetime
-# from airflow import DAG
-# from airflow.operators.python import PythonOperator
-# from airflow.models import Variable
-# from airflow.models.baseoperator import chain
-
-
-# default_args = {
-#     'owner': 'youtube_client'
-# }
 
 load_dotenv()
 
@@ -66,7 +56,7 @@ def get_valid_credentials():
     return credentials
 
 
-def extract_my_playlists(youtube) -> dict[str, str]:
+def extract_user_playlists(youtube) -> dict[str, str]:
     """
     Return a dictionary object that contains playlist ids and titles
     of all music playlists created by current user.
@@ -88,7 +78,51 @@ def extract_my_playlists(youtube) -> dict[str, str]:
     return playlists
 
 
-def extract_playlist_videos(youtube, playlist_id: str, nextPageToken: str = ''):
+def extract_videos(youtube, playlists: dict[str, str]) -> None:
+    """
+    Populate:
+        distinct_videos: dictionary that contains unique videos.
+        Key is video id, values are list of title, channel name, description and duration in ms.
+
+        youtube_library: a list that maps playlist id to video id (both are strings).
+        `Liked videos` are included as a pseudo playlist with id equal to '0'.
+    """
+    extract_videos_from_playlists(youtube, playlists)
+    extract_liked_videos(youtube)
+
+
+def extract_videos_from_playlists(youtube, playlists: dict[str, str]) -> None:
+    """
+    Extract videos from your playlists and store them in distinct_videos and youtube_library.
+
+    Args:
+        playlists: iterable object that contains playlist ids
+    """
+    for playlist_id in playlists:
+    
+        response = get_playlist_items_page(youtube, playlist_id)
+        populate_with_playlist_items_page(response, playlist_id)
+
+        while response.get('nextPageToken', ''):
+            response = get_playlist_items_page(youtube, playlist_id, response['nextPageToken'])
+            populate_with_playlist_items_page(response, playlist_id)
+    
+    add_ms_duration(youtube)
+
+
+def extract_liked_videos(youtube) -> None:
+    """
+    Extract your liked videos and store them in distinct_videos and youtube_library.
+    """
+    response = get_liked_videos_page(youtube)
+    populate_with_liked_videos_page(response)
+
+    while response.get('nextPageToken', ''):
+        response = get_liked_videos_page(youtube, response['nextPageToken'])
+        populate_with_liked_videos_page(response)
+
+
+def get_playlist_items_page(youtube, playlist_id: str, nextPageToken: str = ''):
     """
     Return a requested page of the API call as a json object.
     Contains information about videos in the playlist.
@@ -111,68 +145,7 @@ def extract_playlist_videos(youtube, playlist_id: str, nextPageToken: str = ''):
     return response
 
 
-def populate_videos(response, playlist_id: str) -> None:
-    for item in response['items']:
-        # Remove deleted, private and duplicate videos
-        if item['snippet']['title'] not in ('Deleted video', 'Private video'):
-            playlist_items.append([item['contentDetails']['videoId'],
-                                   playlist_id,
-                                   item['snippet']['title'],
-                                   item['snippet']['videoOwnerChannelTitle'],
-                                   item['snippet']['description']])
-
-
-def extract_playlist_items(youtube, playlists: dict[str, str]) -> None:
-    """
-    Extract playlist items info (video ids, titles, channel names and descriptions)
-    and store it in the playlist_items.
-
-    Args:
-        playlists: iterable object that contains playlist ids
-    """
-    for playlist_id in playlists:
-    
-        response = extract_playlist_videos(youtube, playlist_id)
-        populate_videos(response, playlist_id)
-
-        while response.get('nextPageToken', ''):
-            response = extract_playlist_videos(youtube, playlist_id, response['nextPageToken'])
-            populate_videos(response, playlist_id)
-
-
-def add_ms_duration(youtube) -> None:
-    """
-    Split video ids into 50-size chunks, call videos().list for each chunk.
-    Extract video duration, convert it to milliseconds and store it in the playlist_items.
-    """
-    chunks: list[list[str]] = []
-    chunk: list[str] = []
-
-    for ind, video in enumerate(video_id for video_id, *_ in playlist_items):
-        if ind % 50 == 0 and chunk: # not include the first empty chunk
-            chunks.append(chunk)
-            logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
-            chunk = []
-        chunk.append(video)
-
-    chunks.append(chunk) # append the last chunk
-    logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
-    
-    str_chunks: list[str] = [','.join(chunk) for chunk in chunks]
-
-    for chunk_ind, str_chunk in enumerate(str_chunks):
-        request = youtube.videos().list(part="snippet,contentDetails", id=str_chunk)
-        response = request.execute()
-        
-        for item_ind, item in enumerate(response['items']):
-            iso8601_duration = item['contentDetails']['duration']
-            duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
-            
-            i = (chunk_ind * 50) + item_ind
-            playlist_items[i].append(duration_ms)
-
-
-def extract_liked_videos(youtube, nextPageToken: str = ''):
+def get_liked_videos_page(youtube, nextPageToken: str = ''):
     '''
     Return a requested page of the API call as a json object.
     Contains information about liked videos.
@@ -195,32 +168,68 @@ def extract_liked_videos(youtube, nextPageToken: str = ''):
     return response
 
 
-def populate_liked_videos(response):
-    # deleted and private videos actomaticly excluded by YouTube Data API
+def populate_with_playlist_items_page(response, playlist_id: str) -> None:
     for item in response['items']:
+        # Remove deleted and private videos
+        if item['snippet']['title'] not in ('Deleted video', 'Private video'):
+
+            distinct_videos[item['contentDetails']['videoId']] = [item['snippet']['title'],
+                                                                  item['snippet']['videoOwnerChannelTitle'],
+                                                                  item['snippet']['description']]
+
+            youtube_library.append([playlist_id,
+                                    item['contentDetails']['videoId']])
+
+
+def populate_with_liked_videos_page(response):
+    for item in response['items']:
+        # deleted and private videos actomaticly excluded by YouTube Data API
         iso8601_duration = item['contentDetails']['duration']
         duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
-        liked_videos[item['id']] = ['0', # id of Liked videos
-                                    item['snippet']['title'],
-                                    item['snippet']['channelTitle'],
-                                    item['snippet']['description'],
-                                    duration_ms]
+
+        distinct_videos[item['id']] = [item['snippet']['title'],
+                                       item['snippet']['channelTitle'],
+                                       item['snippet']['description'],
+                                       duration_ms]
+
+        youtube_library.append(['0', # id of Liked videos
+                                item['id']])
 
 
-def extract_all_liked_videos(youtube) -> None:
+def add_ms_duration(youtube) -> None:
     """
-    Extract liked videos info (video ids, titles, channel names and duration)
-    and store it in the liked_videos dictionary.
+    Split video ids into 50-size chunks, call videos().list for each chunk.
+    Extract video duration, convert it to milliseconds and store it in the distinct_videos.
     """
-    response = extract_liked_videos(youtube)
-    populate_liked_videos(response)
+    chunks: list[list[str]] = []
+    chunk: list[str] = []
 
-    while response.get('nextPageToken', ''):
-        response = extract_liked_videos(youtube, response['nextPageToken'])
-        populate_liked_videos(response)
+    for ind, video_id in enumerate(distinct_videos):
+        if ind % 50 == 0 and chunk: # not include the first empty chunk
+            chunks.append(chunk)
+            logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
+            chunk = []
+        chunk.append(video_id)
+
+    chunks.append(chunk) # append the last chunk
+    logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
+    
+    str_chunks: list[str] = [','.join(chunk) for chunk in chunks]
+
+    for chunk_ind, str_chunk in enumerate(str_chunks):
+        request = youtube.videos().list(part="snippet,contentDetails", id=str_chunk)
+        response = request.execute()
+        
+        for item_ind, item in enumerate(response['items']):
+            video_id = chunks[chunk_ind][item_ind] # get the videoId
+
+            iso8601_duration = item['contentDetails']['duration']
+            duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
+            
+            distinct_videos[video_id].append(duration_ms)
 
 
-def playlists_to_df(playlists: dict[str, str]) -> pd.DataFrame:
+def create_df_playlists(playlists: dict[str, str]) -> pd.DataFrame:
     """
     Return a playlists dataframe from a playlist dictionary.
     """
@@ -237,36 +246,31 @@ def playlists_to_df(playlists: dict[str, str]) -> pd.DataFrame:
     return df_playlists
 
 
-def playlist_items_to_df(playlist_items: list[list[str]]) -> pd.DataFrame:
+def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
     """
-    Return a playlist_items dataframe from a playlist_items list.
+    Return a df_videos dataframe from a distinct_videos dictionary.
     """
-    df_playlist_items = pd.DataFrame(playlist_items, columns=['video_id',
-                                                              'youtube_playlist_id',
-                                                              'youtube_title',
-                                                              'youtube_channel',
-                                                              'description',
-                                                              'duration_ms'])
-    df_playlist_items['order_num'] = df_playlist_items.index
-    return df_playlist_items
+    df_videos = pd.DataFrame.from_dict(distinct_videos, orient='index',
+                                       columns=['youtube_title',
+                                                'youtube_channel',
+                                                'description',
+                                                'duration_ms']) \
+                                        .reset_index(names='video_id')
+    return df_videos
 
 
-def liked_videos_to_df(liked_videos: dict[str, list[str]]) -> pd.DataFrame:
+def create_df_youtube_library(youtube_library: list[list[str]]) -> pd.DataFrame:
     """
-    Return a liked_videos dataframe from a liked_videos dictionary.
+    Return a df_youtube_library dataframe from a youtube_library list.
     """
-    df_liked_videos = pd.DataFrame.from_dict(liked_videos, orient='index',
-                                             columns=['youtube_playlist_id',
-                                                      'youtube_title',
-                                                      'youtube_channel',
-                                                      'description',
-                                                      'duration_ms']) \
-                                            .reset_index(names='video_id')
-    df_liked_videos['order_num'] = -(df_liked_videos.index+1)
-    return df_liked_videos
+    df_youtube_library = pd.DataFrame(youtube_library,
+                                      columns=['youtube_playlist_id',
+                                               'video_id']) \
+                                        .reset_index(names='id')
+    return df_youtube_library
 
 
-def load_to_bigquery(df: pd.DataFrame, table_name: str, method: str) -> None:
+def load_to_bigquery(df: pd.DataFrame, table_name: str, method: str = 'replace') -> None:
     """
     Upload the dataframe in Google BigQuery.
     Create, replace or append depending on the method passed.
@@ -290,55 +294,19 @@ if __name__ == '__main__':
     credentials = get_valid_credentials()
     youtube = build("youtube", "v3", credentials=credentials)
 
-    playlists = extract_my_playlists(youtube)
-    df_playlists = playlists_to_df(playlists)
-    load_to_bigquery(df_playlists, 'youtube_playlists', 'replace')
+    playlists = extract_user_playlists(youtube)
+    df_playlists = create_df_playlists(playlists)
+    load_to_bigquery(df_playlists, 'youtube_playlists')
     print(f'youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows.')
 
-    playlist_items: list[list[str]] = []
-    liked_videos: dict[str, list[str]] = {}
+    distinct_videos: dict[str, list[str]] = {}
+    youtube_library: list[list[str]] = []
+    extract_videos(youtube, playlists)
 
-    extract_playlist_items(youtube, playlists)
-    add_ms_duration(youtube)
-    df_playlist_items = playlist_items_to_df(playlist_items)
-    load_to_bigquery(df_playlist_items, 'youtube_videos', 'replace')
-    print(f'playlist_items uploaded to BigQuery, {len(df_playlist_items)} rows.')
+    df_videos = create_df_videos(distinct_videos)
+    load_to_bigquery(df_videos, 'youtube_videos')
+    print(f'youtube_videos uploaded to BigQuery, {len(df_videos)} rows.')
 
-    extract_all_liked_videos(youtube)
-    df_liked_videos = liked_videos_to_df(liked_videos)
-    load_to_bigquery(df_liked_videos, 'youtube_videos', 'append')
-    print(f'liked_videos uploaded to BigQuery, {len(df_liked_videos)} rows.')
-
-
-
-
-# with DAG(
-#     dag_id='extract_my_youtube_videos',
-#     default_args=default_args,
-#     description='Youtube DAG',
-#     start_date=datetime(2023, 8, 11),
-#     schedule='@hourly', # None
-#     catchup=False,
-# ) as dag:
-    
-#     connect_to_account = PythonOperator(
-#         task_id = 'connect_to_account',
-#         python_callable=connect
-#     )
-
-#     extract_my_playlists = PythonOperator(
-#         task_id = 'extract_my_playlists',
-#         python_callable=extract_my_playlists
-#     )
-
-#     extract_all_videos = PythonOperator(
-#         task_id = 'extract_all_videos',
-#         python_callable=extract_all_videos
-#     )
-
-
-#     chain(
-#         connect_to_account,
-#         extract_my_playlists,
-#         extract_all_videos
-#     )
+    df_youtube_library = create_df_youtube_library(youtube_library)
+    load_to_bigquery(df_youtube_library, 'youtube_library')
+    print(f'youtube_library uploaded to BigQuery, {len(df_youtube_library)} rows.')

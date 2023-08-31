@@ -589,11 +589,11 @@ if __name__ == '__main__':
     print(f'{len(df_playlists)} playlists were added.')
 
     df_spotify_playlists = create_df_spotify_playlists(df_playlists)
-    load_to_bigquery(df_spotify_playlists, 'spotify_playlists', 'replace')
+    load_to_bigquery(df_spotify_playlists, 'spotify_playlists')
     print(f'spotify_playlists uploaded to BigQuery.')
 
     df_playlist_ids = create_df_playlist_ids(df_playlists)
-    load_to_bigquery(df_playlist_ids, 'playlist_ids', 'replace')
+    load_to_bigquery(df_playlist_ids, 'playlist_ids')
     print(f'playlist_ids uploaded to BigQuery.')
 
     # Populate Spotify.
@@ -605,22 +605,22 @@ if __name__ == '__main__':
     df_videos.apply(populate_spotify, axis = 1)
 
     df_spotify_albums = create_df_spotify_albums(spotify_albums)
-    load_to_bigquery(df_spotify_albums, 'spotify_albums', 'replace')
+    load_to_bigquery(df_spotify_albums, 'spotify_albums')
     print(f'spotify_albums uploaded to BigQuery, {len(df_spotify_albums)} rows.')
 
     df_spotify_playlists_others = create_df_spotify_playlists_others(spotify_playlists_others)
-    load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others', 'replace')
+    load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others')
     print(f'spotify_playlists_others uploaded to BigQuery, {len(df_spotify_playlists_others)} rows.')
 
     df_spotify_tracks = create_df_spotify_tracks(spotify_tracks)
-    load_to_bigquery(df_spotify_tracks, 'spotify_tracks', 'replace')
+    load_to_bigquery(df_spotify_tracks, 'spotify_tracks')
     print(f'spotify_tracks uploaded to BigQuery, {len(df_spotify_tracks)} rows.')
 
     df_spotify_log = create_df_spotify_log(spotify_log)
-    load_to_bigquery(df_spotify_log, 'spotify_log', 'replace')
+    load_to_bigquery(df_spotify_log, 'spotify_log')
     print(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
 
     # Create search types.
     df_search_types = create_df_search_types()
-    load_to_bigquery(df_search_types, 'search_types', 'replace')
+    load_to_bigquery(df_search_types, 'search_types')
     print(f'search_types uploaded to BigQuery.')
