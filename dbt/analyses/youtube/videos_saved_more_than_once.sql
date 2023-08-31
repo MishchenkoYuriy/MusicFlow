@@ -4,8 +4,8 @@ template as (
 
     select
         yv.video_id,
-        yv.title,
-        yv.channel_name,
+        yv.youtube_title,
+        yv.youtube_channel,
         coalesce(yp.playlist_name, 'Liked videos') as playlist_name
     
     from {{ ref('stg__youtube_videos') }} yv
@@ -18,15 +18,15 @@ template as (
 final as (
 
     select
-        title,
-        channel_name,
+        youtube_title,
+        youtube_channel,
         'https://www.youtube.com/watch?v='||video_id link,
         count(1) as section_cnt,
         string_agg(playlist_name, '; ') as sections
     
     from template
 
-    group by video_id, title, channel_name
+    group by video_id, youtube_title, youtube_channel
     having count(1) > 1
 
     order by section_cnt desc

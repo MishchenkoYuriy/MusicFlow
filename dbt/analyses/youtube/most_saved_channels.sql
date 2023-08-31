@@ -3,12 +3,12 @@ with
 final as (
 
     select
-        channel_name,
+        youtube_channel,
         count(1) as videos
 
     from {{ ref('stg__youtube_videos') }}
 
-    group by channel_name
+    group by youtube_channel
 
     order by count(1) desc
 

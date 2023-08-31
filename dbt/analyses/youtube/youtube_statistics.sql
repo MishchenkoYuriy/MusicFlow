@@ -11,8 +11,8 @@ final as (
         end as video_type,
 
         case
-        when youtube_playlist_id is not null then 'In playlists'
-        when youtube_playlist_id is null then 'In liked videos'
+        when youtube_playlist_id = '0' then 'In liked videos'
+        else 'In playlists'
         end as section
 
 from {{ ref('stg__youtube_videos') }}
