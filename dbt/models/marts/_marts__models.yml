@@ -6,13 +6,15 @@ models:
     description: '{{ doc("log_found_videos") }}'
     tests:
       - dbt_utils.unique_combination_of_columns:
+          name: 'unique_combination_of_columns: log_found_videos'
           combination_of_columns:
             - video_id
             - spotify_playlist_id
       - dbt_utils.equal_rowcount:
+          name: 'equal_rowcount: log_found_videos + stg__spotify_log'
           compare_model: ref('stg__spotify_log')
       - dbt_utils.expression_is_true:
-          name: tracks_in_desc_less_than_or_equal_to_total_tracks
+          name: 'tracks_in_desc <= total_tracks'
           expression: "tracks_in_desc <= total_tracks"
     columns:
       - name: video_id
@@ -57,10 +59,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: percentage_less_than_or_equal_to_100
+              name: 'percentage_in_desc <= 100'
               expression: "<= 100"
           - dbt_utils.expression_is_true:
-              name: percentage_greater_than_or_equal_to_0
+              name: 'percentage_in_desc >= 0'
               expression: ">= 0"
       - name: youtube_duration
         tests:
@@ -77,6 +79,7 @@ models:
     description: '{{ doc("log_not_found_videos") }}'
     tests:
       - dbt_utils.unique_combination_of_columns:
+          name: 'unique_combination_of_columns: log_not_found_videos'
           combination_of_columns:
             - video_id
             - youtube_playlist_id

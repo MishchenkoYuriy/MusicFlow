@@ -58,13 +58,13 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: duration_ms_greater_than_0
+              name: 'duration_ms > 0'
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: total_tracks_greater_than_1
+              name: 'total_tracks > 1'
               expression: "> 1"
 
 
@@ -72,10 +72,12 @@ models:
     description: '{{ doc("spotify_log") }}'
     tests:
       - dbt_utils.unique_combination_of_columns:
+          name: 'unique_combination_of_columns: stg__spotify_log'
           combination_of_columns:
             - youtube_video_id
             - spotify_playlist_id
       - dbt_utils.unique_combination_of_columns:
+          name: 'unique_combination_of_columns: stg__spotify_log where status = "saved"'
           combination_of_columns:
             - spotify_uri
             - spotify_playlist_id
@@ -108,10 +110,10 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: found_on_try_greater_than_or_equal_to_0
+              name: 'found_on_try >= 0'
               expression: ">= 0"
           - dbt_utils.expression_is_true:
-              name: found_on_try_less_than_or_equal_to_1
+              name: 'found_on_try <= 1'
               expression: "<= 1"
       - name: difference_ms
         tests:
@@ -120,7 +122,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: tracks_in_desc_greater_than_or_equal_to_0
+              name: 'tracks_in_desc >= 0'
               expression: ">= 0"
       - name: q
         tests:
@@ -142,6 +144,7 @@ models:
     description: '{{ doc("spotify_playlists") }}'
     tests:
       - dbt_utils.equal_rowcount:
+          name: 'equal_rowcount: stg__spotify_playlists + stg__playlist_ids'
           compare_model: ref('stg__playlist_ids')
     columns:
       - name: spotify_playlist_id
@@ -172,13 +175,13 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: duration_ms_greater_than_0
+              name: 'duration_ms > 0'
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: total_tracks_greater_than_1
+              name: 'total_tracks > 1'
               expression: "> 1"
 
 
@@ -202,7 +205,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: duration_ms_greater_than_0
+              name: 'duration_ms > 0'
               expression: "> 0"
 
 
@@ -210,6 +213,7 @@ models:
     description: '{{ doc("youtube_playlists") }}'
     tests:
       - dbt_utils.equal_rowcount:
+          name: 'equal_rowcount: stg__youtube_playlists + stg__playlist_ids'
           compare_model: ref('stg__playlist_ids')
     columns:
       - name: youtube_playlist_id
@@ -225,6 +229,7 @@ models:
     description: '{{ doc("youtube_videos") }}'
     tests:
       - dbt_utils.unique_combination_of_columns:
+          name: 'unique_combination_of_columns: stg__youtube_videos'
           combination_of_columns:
             - video_id
             - youtube_playlist_id 
@@ -247,7 +252,7 @@ models:
         tests:
           - not_null
           - dbt_utils.expression_is_true:
-              name: duration_ms_greater_than_0
+              name: 'duration_ms > 0'
               expression: "> 0"
       - name: order_num
         tests:
