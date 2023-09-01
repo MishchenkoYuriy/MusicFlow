@@ -1,6 +1,7 @@
 import os
 import re
 import pandas as pd
+from datetime import datetime
 from dotenv import load_dotenv
 import logging
 from youtube_etl import load_to_bigquery
@@ -159,14 +160,14 @@ def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_track(track_info: dict, user_playlist_id: str, video_title: str) -> str:
+def save_track(track_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (track_info['track_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_tracks):
-        status = 'skipped (saved during the run)'
+        status, added_at = 'skipped (saved during the run)', None
         print(f'WARNING: Track "{video_title}" skipped (saved during the run)')
 
     elif track_info['track_uri'] in liked_tracks_uri and user_playlist_id == '0':
-        status = 'skipped (saved before the run)'
+        status, added_at = 'skipped (saved before the run)', None
         print(f'WARNING: Track "{video_title}" skipped (saved before the run)')
     
     else:
@@ -174,15 +175,17 @@ def save_track(track_info: dict, user_playlist_id: str, video_title: str) -> str
         if user_playlist_id != '0':
             # Add the track to the playlist
             sp.playlist_add_items(user_playlist_id, [track_info['track_uri']])
+            added_at = pd.to_datetime(datetime.utcnow())
         
         else:
             # Like the track
             sp.current_user_saved_tracks_add([track_info['track_uri']])
+            added_at = pd.to_datetime(datetime.utcnow())
     
-    return status
+    return status, added_at
 
 
-def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str) -> None:
+def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
     distinct_tracks[track_info['track_uri']] = (track_info['album_uri'],
                                                 None,
                                                 track_info['track_title'],
@@ -198,7 +201,8 @@ def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str)
                        track_info['tracks_in_desc'],
                        track_info['q'],
                        track_info['search_type_id'],
-                       status))
+                       status,
+                       added_at))
 
 
 def find_album(row) -> dict:
@@ -263,14 +267,14 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_album(album_info: dict, user_playlist_id: str, video_title: str) -> str:
+def save_album(album_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (album_info['album_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_albums):
-        status = 'skipped (saved during the run)'
+        status, added_at = 'skipped (saved during the run)', None
         print(f'WARNING: Album "{video_title}" skipped (saved during the run)')
     
     elif album_info['album_uri'] in liked_albums_uri and user_playlist_id == '0':
-        status = 'skipped (saved before the run)'
+        status, added_at = 'skipped (saved before the run)', None
         print(f'WARNING: Album "{video_title}" skipped (saved before the run)')
 
     else:
@@ -278,6 +282,7 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str) -> str
         if user_playlist_id != '0':
             # Add album tracks not present in the playlist to the playlist
             sp.playlist_add_items(user_playlist_id, album_info['tracks_uri'])
+            added_at = pd.to_datetime(datetime.utcnow())
 
             # Save the album to current user library
             # sp.current_user_saved_albums_add([album_info['album_uri']])
@@ -288,11 +293,12 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str) -> str
 
             # Save the album to current user library
             sp.current_user_saved_albums_add([album_info['album_uri']])
+            added_at = pd.to_datetime(datetime.utcnow())
 
-    return status
+    return status, added_at
 
 
-def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str) -> None:
+def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
     distinct_albums[album_info['album_uri']] = (album_info['album_title'],
                                                 album_info['album_artists'],
                                                 album_info['duration_ms'],
@@ -316,7 +322,8 @@ def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str)
                        album_info['tracks_in_desc'],
                        album_info['q'],
                        album_info['search_type_id'],
-                       status))
+                       status,
+                       added_at))
 
 
 def find_other_playlist(row) -> dict:
@@ -392,13 +399,14 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title: str) -> str:
+def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (playlist_info['playlist_uri'], user_playlist_id) not in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others):
         status = 'saved'
         if user_playlist_id != '0':
             # Add playlist tracks not present in the current user playlist to the current user playlist
             sp.playlist_add_items(user_playlist_id, playlist_info['tracks_uri'])
+            added_at = pd.to_datetime(datetime.utcnow())
 
             # Save the playlist to current user library
             # sp.current_user_follow_playlist(playlist_info['playlist_id'])
@@ -409,15 +417,16 @@ def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title:
 
             # Save the playlist to current user library
             sp.current_user_follow_playlist(playlist_info['playlist_id'])
+            added_at = pd.to_datetime(datetime.utcnow())
 
     else:
-        status = 'skipped (saved during the run)'
+        status, added_at = 'skipped (saved during the run)', None
         print(f'WARNING: Playlist "{video_title}" skipped (saved during the run)')
 
-    return status
+    return status, added_at
 
 
-def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, status: str) -> None:
+def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
     distinct_playlists_others[playlist_info['playlist_uri']] = (playlist_info['playlist_title'],
                                                                playlist_info['playlist_owner'],
                                                                playlist_info['duration_ms'],
@@ -441,7 +450,8 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
                                  playlist_info['tracks_in_desc'],
                                  playlist_info['q'],
                                  playlist_info['search_type_id'],
-                                 status))
+                                 status,
+                                 added_at))
 
 
 def populate_spotify(row) -> None:
@@ -460,21 +470,21 @@ def populate_spotify(row) -> None:
     if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
         album_info = find_album(row)
         if album_info:
-            status = save_album(album_info, user_playlist_id, row['youtube_title'])
-            log_album(album_info, user_playlist_id, row['log_id'], status)
+            status, added_at = save_album(album_info, user_playlist_id, row['youtube_title'])
+            log_album(album_info, user_playlist_id, row['log_id'], status, added_at)
         else:
             playlist_info = find_other_playlist(row)
             if playlist_info:
-                status = save_other_playlist(playlist_info, user_playlist_id, row['youtube_title'])
-                log_other_playlist(playlist_info, user_playlist_id, row['log_id'], status)
+                status, added_at = save_other_playlist(playlist_info, user_playlist_id, row['youtube_title'])
+                log_other_playlist(playlist_info, user_playlist_id, row['log_id'], status, added_at)
 
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
     else:
         track_info = find_track(row)
         if track_info:
-            status = save_track(track_info, user_playlist_id, row['youtube_title'])
-            log_track(track_info, user_playlist_id, row['log_id'], status)
+            status, added_at = save_track(track_info, user_playlist_id, row['youtube_title'])
+            log_track(track_info, user_playlist_id, row['log_id'], status, added_at)
 
 
 def create_df_spotify_albums(distinct_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -531,7 +541,8 @@ def create_df_spotify_log(log_albums: list[tuple[str]],
             'tracks_in_desc',
             'q',
             'search_type_id',
-            'status']
+            'status',
+            'added_at']
 
     df1 = pd.DataFrame(log_albums, columns=cols)
 
@@ -641,7 +652,8 @@ if __name__ == '__main__':
         bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
         bigquery.SchemaField("q", bigquery.enums.SqlTypeNames.STRING),
         bigquery.SchemaField("search_type_id", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING)
+        bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING),
+        bigquery.SchemaField("added_at", bigquery.enums.SqlTypeNames.DATETIME),
     ]
     load_to_bigquery(df_spotify_log, 'spotify_log', log_schema)
     print(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
