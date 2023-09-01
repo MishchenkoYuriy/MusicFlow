@@ -7,6 +7,7 @@ final as (
     select
         track_uri,
         album_uri,
+        playlist_uri,
         track_title,
         track_artists,
         duration_ms

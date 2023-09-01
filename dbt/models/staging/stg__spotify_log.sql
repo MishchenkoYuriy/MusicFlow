@@ -5,9 +5,9 @@ with
 final as (
 
     select
+        log_id,
         spotify_uri,
         spotify_playlist_id,
-        youtube_video_id,
         found_on_try,
         difference_ms,
         tracks_in_desc,

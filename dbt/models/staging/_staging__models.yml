@@ -42,10 +42,16 @@ models:
         tests:
           - unique
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__search_types, search_type_id, int64'
+              column_type: int64
       - name: search_type_name
         description: '{{ doc("search_type_name") }}'
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__search_types, search_type_name, string'
+              column_type: string
 
 
   - name: stg__spotify_albums
@@ -57,21 +63,36 @@ models:
           - not_null
           # - duration_match
           # - tracks_count_match
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_albums, album_uri, string'
+              column_type: string
       - name: album_title
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_albums, album_title, string'
+              column_type: string
       - name: album_artists
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_albums, album_artists, string'
+              column_type: string
       - name: duration_ms
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_albums, duration_ms, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'duration_ms > 0'
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_albums, total_tracks, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'total_tracks > 1'
               expression: "> 1"
@@ -81,11 +102,6 @@ models:
     description: '{{ doc("spotify_log") }}'
     tests:
       - dbt_utils.unique_combination_of_columns:
-          name: 'unique_combination_of_columns: stg__spotify_log'
-          combination_of_columns:
-            - youtube_video_id
-            - spotify_playlist_id
-      - dbt_utils.unique_combination_of_columns:
           name: 'unique_combination_of_columns: stg__spotify_log where status = "saved"'
           combination_of_columns:
             - spotify_uri
@@ -93,58 +109,90 @@ models:
           where:
             "status = 'saved'" # exclude skipped
     columns:
+      - name: log_id
+        tests:
+          - unique
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, log_id, int64'
+              column_type: int64
       - name: spotify_uri
         tests:
           - not_null
-          # - relationships:
-          #     to: ref('stg__spotify_albums')
-          #     field: album_uri
-          # - relationships:
-          #     to: ref('stg__spotify_tracks')
-          #     field: track_uri
-          # - relationships:
-          #     to: ref('stg__spotify_playlists_others')
-          #     field: playlist_uri
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, spotify_uri, string'
+              column_type: string
+          - dbt_expectations.expect_column_values_to_match_regex:
+              name: 'match_regex: stg__spotify_log, spotify_uri'
+              regex: "^spotify:(album|playlist|track):.+$"
+          - relationships:
+              to: ref('stg__spotify_albums')
+              field: album_uri
+              where: 'spotify_uri like "spotify:album:%"'
+          - relationships:
+              to: ref('stg__spotify_playlists_others')
+              field: playlist_uri
+              where: 'spotify_uri like "spotify:playlist:%"'
+          - relationships:
+              to: ref('stg__spotify_tracks')
+              field: track_uri
+              where: 'spotify_uri like "spotify:track:%"'
       - name: spotify_playlist_id
         tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, spotify_playlist_id, string'
+              column_type: string
           - relationships:
               to: ref('stg__spotify_playlists')
               field: spotify_playlist_id
-      - name: youtube_video_id
-        tests:
-          - relationships:
-              to: ref('stg__youtube_videos')
-              field: video_id
       - name: found_on_try
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              name: 'found_on_try >= 0'
-              expression: ">= 0"
-          - dbt_utils.expression_is_true:
-              name: 'found_on_try <= 1'
-              expression: "<= 1"
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, found_on_try, int64'
+              column_type: int64
+          - dbt_expectations.expect_column_values_to_be_between:
+              name: '0 <= found_on_try <= 1'
+              min_value: 0
+              max_value: 1
+              strictly: false
       - name: difference_ms
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, difference_ms, int64'
+              column_type: int64
       - name: tracks_in_desc
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, tracks_in_desc, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'tracks_in_desc >= 0'
               expression: ">= 0"
       - name: q
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, q, string'
+              column_type: string
       - name: search_type_id
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, search_type_id, int64'
+              column_type: int64
           - relationships:
               to: ref('stg__search_types')
               field: search_type_id
       - name: status
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_log, status, string'
+              column_type: string
           - accepted_values:
               values: ['saved', 'skipped (saved before the run)', 'skipped (saved during the run)']
 
@@ -160,9 +208,15 @@ models:
         tests:
           - unique
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists, spotify_playlist_id, string'
+              column_type: string
       - name: playlist_name
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists, playlist_name, string'
+              column_type: string
 
 
   - name: stg__spotify_playlists_others
@@ -174,21 +228,36 @@ models:
           - not_null
           # - duration_match
           # - tracks_count_match
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists_others, playlist_uri, string'
+              column_type: string
       - name: playlist_title
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists_others, playlist_title, string'
+              column_type: string
       - name: playlist_owner
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists_others, playlist_owner, string'
+              column_type: string
       - name: duration_ms
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists_others, duration_ms, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'duration_ms > 0'
               expression: "> 0"
       - name: total_tracks
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_playlists_others, total_tracks, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'total_tracks > 1'
               expression: "> 1"
@@ -201,21 +270,44 @@ models:
         tests:
           - unique
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, track_uri, string'
+              column_type: string
       - name: album_uri
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, album_uri, string'
+              column_type: string
+      - name: playlist_uri
+        tests:
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, playlist_uri, string'
+              column_type: string
       - name: track_title
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, track_title, string'
+              column_type: string
       - name: track_artists
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, track_artists, string'
+              column_type: string
       - name: duration_ms
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__spotify_tracks, duration_ms, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'duration_ms > 0'
               expression: "> 0"
+
+
+  #- name: stg__youtube_library
 
 
   - name: stg__youtube_playlists
@@ -229,41 +321,51 @@ models:
         tests:
           - unique
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_playlists, youtube_playlist_id, string'
+              column_type: string
       - name: playlist_name
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_playlists, playlist_name, string'
+              column_type: string
 
 
   - name: stg__youtube_videos
     description: '{{ doc("youtube_videos") }}'
-    tests:
-      - dbt_utils.unique_combination_of_columns:
-          name: 'unique_combination_of_columns: stg__youtube_videos'
-          combination_of_columns:
-            - video_id
-            - youtube_playlist_id 
     columns:
       - name: video_id
         tests:
           - not_null
-      - name: youtube_playlist_id
-        tests:
-          - relationships:
-              to: ref('stg__youtube_playlists')
-              field: youtube_playlist_id
+          - unique
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_videos, video_id, string'
+              column_type: string
       - name: youtube_title
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_videos, youtube_title, string'
+              column_type: string
       - name: youtube_channel
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_videos, youtube_channel, string'
+              column_type: string
+      - name: description
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_videos, description, string'
+              column_type: string
       - name: duration_ms
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_videos, duration_ms, int64'
+              column_type: int64
           - dbt_utils.expression_is_true:
               name: 'duration_ms > 0'
               expression: "> 0"
-      - name: order_num
-        tests:
-          - unique
-          - not_null
