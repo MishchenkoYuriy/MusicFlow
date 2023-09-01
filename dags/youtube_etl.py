@@ -270,7 +270,7 @@ def create_df_youtube_library(youtube_library: list[list[str]]) -> pd.DataFrame:
     return df_youtube_library
 
 
-def load_to_bigquery(df: pd.DataFrame, table_name: str, method: str = 'replace') -> None:
+def load_to_bigquery(df: pd.DataFrame, table_name: str, schema: list = None, method: str = 'replace') -> None:
     """
     Upload the dataframe in Google BigQuery.
     Create, replace or append depending on the method passed.
@@ -280,7 +280,7 @@ def load_to_bigquery(df: pd.DataFrame, table_name: str, method: str = 'replace')
     table_id = f'{project_id}.marts.{table_name}'
 
     if method == 'replace':
-        job_config = bigquery.LoadJobConfig(write_disposition="WRITE_TRUNCATE")
+        job_config = bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_TRUNCATE")
         client.load_table_from_dataframe(df, table_id, job_config=job_config).result()
 
     elif method == 'append':
