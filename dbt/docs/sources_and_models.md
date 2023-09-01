@@ -1,6 +1,6 @@
 {% docs playlist_ids %}
 
-A mapping table between `youtube_playlists` and `spotify_playlists` by playlist ids (one-to-one relationship).
+A mapping table between `youtube_playlists` and `spotify_playlists` by playlist ids (one-to-one relationship). `Liked videos` are included as a pseudo playlist with id equal to '0'.
 
 {% enddocs %}
 
@@ -30,7 +30,7 @@ Also can be described as a mapping table between YouTube videos and Spotify URIs
 
 {% docs spotify_playlists %}
 
-This table contains the Spotify playlists created during the flow.
+This table contains the Spotify playlists created during the flow. `Liked videos` are included as a pseudo playlist with id equal to '0', but never created.
 
 {% enddocs %}
 
@@ -49,9 +49,16 @@ This table contains your tracks *found* on Spotify, either by themselves or as a
 {% enddocs %}
 
 
+{% docs youtube_library %}
+
+A mapping table between `youtube_playlists` and `youtube_videos` (many-to-many relationship). `Liked videos` are included as a pseudo playlist with id equal to '0'.
+
+{% enddocs %}
+
+
 {% docs youtube_playlists %}
 
-This table contains your playlists on YouTube (excluding `Liked videos`).
+This table contains your playlists on YouTube. `Liked videos` are included as a pseudo playlist with id equal to '0'.
 
 {% enddocs %}
 
@@ -67,6 +74,7 @@ This table contains the videos presented in `Liked videos` or any of your playli
 This model contains the found albums, playlists and tracks found on Spotify, the criteria used to find them, their status and the corresponding YouTube videos. This view can be used to analyse errors.
 
 {% enddocs %}
+
 
 {% docs log_not_found_videos %}
 
@@ -86,6 +94,7 @@ This model contains your YouTube videos not found on Spotify.
 A unique identifier for the type of search.
 
 {% enddocs %}
+
 
 {% docs search_type_name %}
 

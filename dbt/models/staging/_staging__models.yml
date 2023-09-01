@@ -307,7 +307,28 @@ models:
               expression: "> 0"
 
 
-  #- name: stg__youtube_library
+  - name: stg__youtube_library
+    description: '{{ doc("youtube_playlists") }}'
+    columns:
+      - name: id
+        tests:
+          - unique
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_library, id, int64'
+              column_type: int64
+      - name: youtube_playlist_id
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_library, youtube_playlist_id, string'
+              column_type: string
+      - name: video_id
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: stg__youtube_library, video_id, string'
+              column_type: string
 
 
   - name: stg__youtube_playlists
