@@ -104,21 +104,21 @@ def find_track(row) -> dict:
         artist = re.sub('\'', ' ', artist)
 
         q = f'track:{row["youtube_title"]} artist:{artist}'
-        track_info = qsearch_track(row, q=q, search_type_id='0', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id=0, limit=2)
     
     else:
-        track_info = qsearch_track(row, q=row['youtube_title'], search_type_id='1', limit=2)
+        track_info = qsearch_track(row, q=row['youtube_title'], search_type_id=1, limit=2)
 
     # Second try, track + space + track name in quotes
     if not track_info:
         q = f'track "{row["youtube_title"]}"'
-        track_info = qsearch_track(row, q=q, search_type_id='2', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id=2, limit=2)
 
     # Third try, channel name + space + track title
     if not track_info:
         artist = re.sub(' - Topic', '', row['youtube_channel'])
         q = f'{artist} {row["youtube_title"]}'
-        track_info = qsearch_track(row, q=q, search_type_id='3', limit=2)
+        track_info = qsearch_track(row, q=q, search_type_id=3, limit=2)
 
     if not track_info:
         print(f'Track "{row["youtube_title"]}" not found on Spotify')
@@ -202,12 +202,12 @@ def log_track(track_info: dict, spotify_playlist_id: str, log_id: str, status: s
 
 def find_album(row) -> dict:
     # First try, just video title
-    album_info = qsearch_album(row, q=row["youtube_title"], search_type_id='1', limit=2)
+    album_info = qsearch_album(row, q=row["youtube_title"], search_type_id=1, limit=2)
 
     # Second try, album + space + album name in quotes
     if not album_info:
         q = f'album "{row["youtube_title"]}"'
-        album_info = qsearch_album(row, q=q, search_type_id='2', limit=2)
+        album_info = qsearch_album(row, q=q, search_type_id=2, limit=2)
 
     # if not album_info:
     #     print(f'Album "{row["youtube_title"]}" not found on Spotify')
@@ -319,17 +319,17 @@ def log_album(album_info: dict, spotify_playlist_id: str, log_id: str, status: s
 
 def find_other_playlist(row) -> dict:
     # First try, just video title
-    playlist_info = qsearch_playlist(row, q=row["youtube_title"], search_type_id='1', limit=2)
+    playlist_info = qsearch_playlist(row, q=row["youtube_title"], search_type_id=1, limit=2)
 
     # Second try, playlist + space + playlist name in quotes
     if not playlist_info:
         q = f'playlist "{row["youtube_title"]}"'
-        playlist_info = qsearch_playlist(row, q=q, search_type_id='2', limit=2)
+        playlist_info = qsearch_playlist(row, q=q, search_type_id=2, limit=2)
     
     # Third try, channel name + space + playlist title
     if not playlist_info:
         q = f'{row["youtube_channel"]} {row["youtube_title"]}'
-        playlist_info = qsearch_playlist(row, q=q, search_type_id='3', limit=2)
+        playlist_info = qsearch_playlist(row, q=q, search_type_id=3, limit=2)
 
     if not playlist_info:
         print(f'Album/Playlist "{row["youtube_title"]}" not found on Spotify')
@@ -533,10 +533,10 @@ def create_df_spotify_log(spotify_log: list[tuple[str]]) -> pd.DataFrame:
 
 
 def create_df_search_types() -> pd.DataFrame:
-    search_types = {'0': 'colons',
-                    '1': 'title only',
-                    '2': 'keyword and quotes',
-                    '3': 'channel name and title'}
+    search_types = {0: 'colons',
+                    1: 'title only',
+                    2: 'keyword and quotes',
+                    3: 'channel name and title'}
     
     df_search_types = pd.DataFrame.from_dict(search_types, orient='index',
                                             columns=['search_type_name']) \
