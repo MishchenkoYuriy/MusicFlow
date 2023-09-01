@@ -357,13 +357,18 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
         
         tracks = sp.playlist(playlist['uri'])
         for track in tracks['tracks']['items']:
+            artists = []
             if track.get('track', ''):
                 if track['track']['name'].lower() in row['description']: # case-insensitive match
                     tracks_in_desc += 1
                 
+                for artist in track['track']['artists']:
+                    artists.append(artist['name'])
+                
                 tracks_uri.append(track['track']['uri'])
                 tracks_info.append((track['track']['uri'],
                                     track['track']['name'],
+                                    artists,
                                     track['track']['duration_ms'],
                                     track['track']['album']['uri']))
                 
@@ -432,13 +437,11 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
                                                                playlist_info['duration_ms'],
                                                                playlist_info['total_tracks'])
     
-    for track_uri, title, duration_ms, album_uri in playlist_info['tracks_info']:
+    for track_uri, title, artists, duration_ms, album_uri in playlist_info['tracks_info']:
         distinct_tracks[track_uri] = (album_uri,
                                       playlist_info['playlist_uri'],
                                       title,
-                                      # Same as album artists, not always correct,
-                                      # but we don't iterate for every artist on every track.
-                                      playlist_info['playlist_owner'], # TODO: fix
+                                      '; '.join(artist for artist in artists),
                                       duration_ms)
     
     log_playlists_others.append((log_id,
