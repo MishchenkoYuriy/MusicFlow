@@ -3,18 +3,21 @@ import re
 from dotenv import load_dotenv
 from datetime import datetime
 
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotify_auth import auth_with_auth_manager
 
 
 load_dotenv()
 
 
-def populate_tracks_uri(sp, remove_after: datetime = None) -> list:
+def populate_tracks_uri(sp) -> list:
     '''
     Return a list of liked tracks URI for the current user.
     '''
     tracks_uri = []
+    remove_after = None
+
+    if os.getenv('REMOVE_AFTER'): 
+        remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
 
     liked_tracks = sp.current_user_saved_tracks()
     next_liked = liked_tracks['next']
@@ -39,7 +42,7 @@ def populate_tracks_uri(sp, remove_after: datetime = None) -> list:
     return tracks_uri
 
 
-def unlike(sp, tracks_uri: list) -> None:
+def unlike_tracks(sp, tracks_uri: list) -> None:
     '''
     Unlike all tracks from the list of tracks URI. Split the liked tracks into 50-size chunks
     and call current_user_saved_tracks_delete on each one.
@@ -49,19 +52,14 @@ def unlike(sp, tracks_uri: list) -> None:
 
     for chunk in chunks:
         sp.current_user_saved_tracks_delete(chunk)
+    
+    print(f'{len(tracks_uri)} liked songs were removed')
 
 
 if __name__ == '__main__':
     # scope = ["user-library-read", "user-library-modify"]
-    scope = ["user-library-modify", "playlist-modify-private"]
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
-    
-    if os.getenv('REMOVE_AFTER'): 
-        remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
-        tracks_uri = populate_tracks_uri(sp, remove_after)
+    # sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
-    else: # if REMOVE_AFTER is not specified, remove all liked tracks
-        tracks_uri = populate_tracks_uri(sp)
-
-    unlike(sp, tracks_uri)
-    print(f'{len(tracks_uri)} liked songs were removed')
+    sp = auth_with_auth_manager(["user-library-read", "user-library-modify"])
+    tracks_uri = populate_tracks_uri(sp)
+    unlike_tracks(sp, tracks_uri)
