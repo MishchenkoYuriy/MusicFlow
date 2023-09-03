@@ -5,6 +5,7 @@ from datetime import datetime
 
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+# from spotify_auth import auth_with_auth_manager
 
 
 load_dotenv()
@@ -52,6 +53,7 @@ def unlike(sp, albums_uri: list) -> None:
 
 
 if __name__ == '__main__':
+    # sp = auth_with_auth_manager(["user-library-read", "user-library-modify"])
     # scope = ["user-library-read", "user-library-modify"]
     scope = ["user-library-modify", "playlist-modify-private"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
