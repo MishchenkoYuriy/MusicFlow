@@ -1,5 +1,6 @@
 from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
+from airflow.models import Variable
 
 from spotify_unlike_tracks import populate_tracks_uri, unlike_tracks
 from spotify_auth import auth_with_refresh_token
@@ -11,24 +12,25 @@ from spotify_auth import auth_with_refresh_token
     catchup=False
 )
 def spotify_unlike_tracks_dag():
-    @task
-    def task_auth_with_refresh_token():
-        sp = auth_with_refresh_token()
+    @task(task_id='auth_with_refresh_token')
+    def task_auth_with_refresh_token(refresh_token):
+        sp = auth_with_refresh_token(refresh_token)
         return sp
 
 
-    @task
+    @task(task_id='populate_tracks_uri')
     def task_populate_tracks_uri(sp):
         tracks_uri = populate_tracks_uri(sp)
         return tracks_uri
 
 
-    @task
+    @task(task_id='unlike_tracks')
     def task_unlike_tracks(sp, tracks_uri):
         unlike_tracks(sp, tracks_uri)
 
 
-    sp = task_auth_with_refresh_token()
+    refresh_token = Variable.get('REFRESH_TOKEN')
+    sp = task_auth_with_refresh_token(refresh_token)
     tracks_uri = task_populate_tracks_uri(sp)
     task_unlike_tracks(sp, tracks_uri)
 

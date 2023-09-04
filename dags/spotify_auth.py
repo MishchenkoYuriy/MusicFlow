@@ -5,7 +5,6 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth, SpotifyClientCredentials
 
 from dotenv import load_dotenv
-from airflow.models import Variable
 
 load_dotenv()
 
@@ -45,7 +44,7 @@ def auth_with_auth_manager(scope: list = ["user-library-modify", "playlist-modif
     return sp
 
 
-def auth_with_refresh_token():
+def auth_with_refresh_token(refresh_token):
     '''
     A user authentication that uses the refresh token to generate an access token for a session.
     Prevent user input altogether. The refresh token must be set as an Airflow Variable.
@@ -53,7 +52,6 @@ def auth_with_refresh_token():
     '''
     client_id = os.getenv('SPOTIPY_CLIENT_ID')
     client_secret = os.getenv('SPOTIPY_CLIENT_SECRET')
-    refresh_token = Variable.get('REFRESH_TOKEN')
     
     credentials = f'{client_id}:{client_secret}'
     base64_encoded = base64.b64encode(credentials.encode()).decode()

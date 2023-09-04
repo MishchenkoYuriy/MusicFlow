@@ -33,14 +33,15 @@ def remove(playlist_ids: list) -> None:
     '''
     for playlist_id in playlist_ids:
         sp.current_user_unfollow_playlist(playlist_id)
+    
+    print(f'{len(playlist_ids)} playlists were removed')
 
 
 if __name__ == '__main__':
     # scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
-    scope = ["user-library-modify", "playlist-modify-private"]
+    # scope = ["user-library-modify", "playlist-modify-private"]
+    scope = ["playlist-read-private", "playlist-modify-private", "playlist-modify-public"]
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
     playlist_ids = populate_playlist_ids()
     remove(playlist_ids)
-
-    print(f'{len(playlist_ids)} playlists were removed')
