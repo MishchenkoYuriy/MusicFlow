@@ -2,8 +2,8 @@ from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
-from spotify_unlike_tracks import populate_tracks_uri, unlike_tracks
-from spotify_auth import auth_with_refresh_token
+from scripts.spotify_unlike_tracks import populate_tracks_uri, unlike_tracks
+from scripts.spotify_auth import auth_with_refresh_token
 
 
 @dag(

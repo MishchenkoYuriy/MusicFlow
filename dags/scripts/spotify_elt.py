@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
-from youtube_etl import load_to_bigquery
+from youtube_elt import load_to_bigquery
 from spotify_unlike_tracks import populate_tracks_uri
 from spotify_unlike_albums import populate_albums_uri
 

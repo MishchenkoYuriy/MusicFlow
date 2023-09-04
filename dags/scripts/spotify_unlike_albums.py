@@ -3,9 +3,6 @@ import re
 from dotenv import load_dotenv
 from datetime import datetime
 
-from spotify_auth import auth_with_auth_manager
-
-
 load_dotenv()
 
 
@@ -57,6 +54,7 @@ def unlike_albums(sp, albums_uri: list) -> None:
 
 
 if __name__ == '__main__':
+    from spotify_auth import auth_with_auth_manager
     # scope = ["user-library-read", "user-library-modify"]
     # sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
 
