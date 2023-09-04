@@ -9,14 +9,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def print_auth_url() -> None:
+def print_auth_url(scope: str = 'user-library-modify,playlist-modify-private') -> None:
     '''
     Print authentication URL. Used in the project setup to get AUTH_CODE.
     '''
     client_id = os.getenv('SPOTIPY_CLIENT_ID')
     redirect_uri = os.getenv('SPOTIPY_REDIRECT_URI')
-    # ["user-library-read", "user-library-modify"]
-    scope= 'user-library-modify,playlist-modify-private'
     url = f'https://accounts.spotify.com/authorize?client_id={client_id}&response_type=code&redirect_uri={redirect_uri}&scope={scope}'
     print(url)
 
