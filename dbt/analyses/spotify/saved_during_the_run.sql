@@ -13,8 +13,8 @@ final as (
         --total_tracks,
 
         count(video_id) as video_cnt,
-        string_agg('https://www.youtube.com/watch?v='||video_id, '\n') as links_to_videos,
-        string_agg(status, '\n') as statuses
+        string_agg('https://www.youtube.com/watch?v='||video_id, '\n' order by log_id) as links_to_videos,
+        string_agg(cast(log_id as string)||' '||status, '\n' order by log_id) as statuses
     
     from {{ ref('int_join_spotify_uris')}}
 

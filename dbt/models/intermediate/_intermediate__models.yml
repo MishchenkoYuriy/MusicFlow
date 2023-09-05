@@ -5,7 +5,7 @@ models:
   - name: int_join_spotify_uris
     tests:
     - dbt_utils.equal_rowcount:
-        name: 'equal_rowcount: log_found_videos + stg__spotify_log'
+        name: 'equal_rowcount: int_join_spotify_uris + stg__spotify_log'
         compare_model: ref('stg__spotify_log')
     - dbt_utils.unique_combination_of_columns:
         name: 'unique_combination_of_columns: int_join_spotify_uris (exclude skipped)'
@@ -14,3 +14,10 @@ models:
           - user_playlist_id
         where:
           "status = 'saved'"
+
+
+  - name: int_useful_youtube_library
+    tests:
+    - dbt_utils.equal_rowcount:
+        name: 'equal_rowcount: int_useful_youtube_library + stg__youtube_library'
+        compare_model: ref('stg__youtube_library')

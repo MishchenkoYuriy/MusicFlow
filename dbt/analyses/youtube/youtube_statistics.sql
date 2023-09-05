@@ -15,7 +15,7 @@ final as (
         else 'In playlists'
         end as section
 
-from {{ ref('stg__youtube_videos') }}
+from {{ ref('int_useful_youtube_library') }}
 
 group by video_type, section
 
