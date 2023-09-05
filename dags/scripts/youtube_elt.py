@@ -7,7 +7,6 @@ import os
 import pickle
 import aniso8601
 import pandas as pd
-import logging
 from dotenv import load_dotenv
 
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -74,7 +73,6 @@ def extract_user_playlists(youtube) -> dict[str, str]:
         if '💼' not in item['snippet']['title']: # remove non-music playlists
             playlists[item['id']] = item['snippet']['title']
     
-    logging.info(f"{len(playlists)} playlists were extracted")
     return playlists
 
 
@@ -207,12 +205,10 @@ def add_ms_duration(youtube) -> None:
     for ind, video_id in enumerate(distinct_videos):
         if ind % 50 == 0 and chunk: # not include the first empty chunk
             chunks.append(chunk)
-            logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
             chunk = []
         chunk.append(video_id)
 
     chunks.append(chunk) # append the last chunk
-    logging.info(f'Chunk with the length of {len(chunk)} was added, total chunks added: {len(chunks)}')
     
     str_chunks: list[str] = [','.join(chunk) for chunk in chunks]
 
@@ -295,6 +291,8 @@ if __name__ == '__main__':
     youtube = build("youtube", "v3", credentials=credentials)
 
     playlists = extract_user_playlists(youtube)
+    print(f"{len(playlists)} playlists were extracted")
+
     df_playlists = create_df_playlists(playlists)
     load_to_bigquery(df_playlists, 'youtube_playlists')
     print(f'youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows.')

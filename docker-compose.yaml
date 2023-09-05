@@ -70,6 +70,7 @@ x-airflow-common:
     # WARNING: Use _PIP_ADDITIONAL_REQUIREMENTS option ONLY for a quick checks
     # for other purpose (development, test and especially production usage) build/extend Airflow image.
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-}
+    CLIENT_SECRETS_PATH: ${CLIENT_SECRETS_PATH} # Youtube Data API
     SPOTIPY_CLIENT_ID: ${SPOTIPY_CLIENT_ID}
     SPOTIPY_CLIENT_SECRET: ${SPOTIPY_CLIENT_SECRET}
     SPOTIPY_REDIRECT_URI: ${SPOTIPY_REDIRECT_URI}

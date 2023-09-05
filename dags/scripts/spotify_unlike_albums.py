@@ -1,5 +1,6 @@
 import os
 import re
+import logging
 from dotenv import load_dotenv
 from datetime import datetime
 
@@ -50,10 +51,13 @@ def unlike_albums(sp, albums_uri: list) -> None:
     for chunk in chunks:
         sp.current_user_saved_albums_delete(chunk)
     
-    print(f'{len(albums_uri)} liked albums were removed')
+    task_logger.info(f'{len(albums_uri)} liked albums were removed')
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
+    task_logger = logging.getLogger("airflow.task")
+
     from spotify_auth import auth_with_auth_manager
     # scope = ["user-library-read", "user-library-modify"]
     # sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
