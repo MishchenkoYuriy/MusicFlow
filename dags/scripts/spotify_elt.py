@@ -591,12 +591,14 @@ if __name__ == '__main__':
     task_logger.info(f'Datasets were extracted from BigQuery.')
 
     # Authorisation.
-    from spotify_auth import auth_with_auth_manager
-    sp = auth_with_auth_manager(["user-library-read",
-                                 "user-library-modify",
-                                 "playlist-read-private",
-                                 "playlist-modify-private",
-                                 "playlist-modify-public"])
+    from spotify_auth import auth_with_auth_manager, auth_with_refresh_token
+    # scope = ["user-library-read",
+    #          "user-library-modify",
+    #          "playlist-read-private",
+    #          "playlist-modify-private",
+    #          "playlist-modify-public"]
+    # sp = auth_with_auth_manager(scope)
+    sp = auth_with_refresh_token(os.getenv('REFRESH_TOKEN'))
     user_id = get_user_id()
 
     '''

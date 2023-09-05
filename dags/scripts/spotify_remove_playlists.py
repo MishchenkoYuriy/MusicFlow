@@ -1,7 +1,5 @@
 import re
-import spotipy
 import logging
-from spotipy.oauth2 import SpotifyOAuth
 
 
 def populate_playlist_ids() -> list:
@@ -42,10 +40,11 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
     task_logger = logging.getLogger("airflow.task")
     
+    from spotify_auth import auth_with_auth_manager
     # scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
     # scope = ["user-library-modify", "playlist-modify-private"]
     scope = ["playlist-read-private", "playlist-modify-private", "playlist-modify-public"]
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    sp = auth_with_auth_manager(scope)
 
     playlist_ids = populate_playlist_ids()
     remove(playlist_ids)
