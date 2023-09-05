@@ -5,7 +5,7 @@ with
 join_and_calculate as (
 
     select
-        m.{{ column_name }} as uri,
+        m.{{ column_name }} as spotify_uri,
         m.duration_ms as model_duration,
         sum(st.duration_ms) as tracks_duration
     
@@ -20,7 +20,7 @@ join_and_calculate as (
 final as (
 
     select
-        uri,
+        spotify_uri,
         model_duration,
         tracks_duration
     

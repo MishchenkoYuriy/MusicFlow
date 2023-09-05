@@ -5,8 +5,9 @@ with
 final as (
 
     select
+        added_at,
         video_id,
-        spotify_playlist_id,
+        user_playlist_id,
 
         playlist_name,
         spotify_uri,
@@ -27,10 +28,9 @@ final as (
         total_tracks,
         round((tracks_in_desc / total_tracks) * 100, 1) as percentage_in_desc,
 
-        time(timestamp_seconds(div(cast(youtube_duration as int), 1000))) as youtube_duration,
-        time(timestamp_seconds(div(cast(spotify_duration as int), 1000))) as spotify_duration,
-        round(cast(difference_ms as int) / 1000, 1) as difference_sec
-        
+        time(timestamp_seconds(div(youtube_duration, 1000))) as youtube_duration,
+        time(timestamp_seconds(div(spotify_duration, 1000))) as spotify_duration,
+        round(difference_ms / 1000, 1) as difference_sec
 
     from {{ ref('int_join_spotify_uris') }}
 

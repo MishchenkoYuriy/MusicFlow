@@ -5,7 +5,7 @@ with
 join_and_calculate as (
 
     select
-        m.{{ column_name }} as uri,
+        m.{{ column_name }} as spotify_uri,
         m.total_tracks as model_tracks_cnt,
         count(st.track_uri) tracks_cnt
     
@@ -20,7 +20,7 @@ join_and_calculate as (
 final as (
 
     select
-        uri,
+        spotify_uri,
         model_tracks_cnt,
         tracks_cnt
     

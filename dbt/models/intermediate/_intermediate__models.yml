@@ -3,3 +3,14 @@ version: 2
 
 models:
   - name: int_join_spotify_uris
+    tests:
+    - dbt_utils.equal_rowcount:
+        name: 'equal_rowcount: log_found_videos + stg__spotify_log'
+        compare_model: ref('stg__spotify_log')
+    - dbt_utils.unique_combination_of_columns:
+        name: 'unique_combination_of_columns: int_join_spotify_uris (exclude skipped)'
+        combination_of_columns:
+          - spotify_uri
+          - user_playlist_id
+        where:
+          "status = 'saved'"

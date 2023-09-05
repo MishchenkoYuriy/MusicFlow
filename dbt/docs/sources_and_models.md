@@ -14,7 +14,7 @@ This table contains search patterns that the engine uses to find albums, tracks 
 
 {% docs spotify_albums %}
 
-This table contains your albums *found* on Spotify. The original album is a long video on YouTube.
+This table contains your albums *found* on Spotify. They are used to populate spotify_playlists. The original album is a long video on YouTube.
 
 {% enddocs %}
 
@@ -30,21 +30,21 @@ Also can be described as a mapping table between YouTube videos and Spotify URIs
 
 {% docs spotify_playlists %}
 
-This table contains the Spotify playlists created during the flow. `Liked videos` are included as a pseudo playlist with id equal to '0', but never created.
+This table contains the Spotify playlists that have been created and populated during the flow. `Liked videos` are included as a pseudo playlist with id equal to '0', but never created.
 
 {% enddocs %}
 
 
 {% docs spotify_playlists_others %}
 
-This table contains playlists created by other users *found* on Spotify. The original playlist is a long video on YouTube.
+This table contains playlists created by other users *found* on Spotify. They are used to populate spotify_playlists. The original playlist is a long video on YouTube.
 
 {% enddocs %}
 
 
 {% docs spotify_tracks %}
 
-This table contains your tracks *found* on Spotify, either by themselves or as a part of an album or a playlist created by other user.
+This table contains your tracks *found* on Spotify, either by themselves or as a part of an album or a playlist created by other user. They are used to populate spotify_playlists.
 
 {% enddocs %}
 
@@ -97,8 +97,6 @@ A unique identifier for the type of search.
 
 
 {% docs search_type_name %}
-
-Spotify 
 
 status | description
 --- | ---

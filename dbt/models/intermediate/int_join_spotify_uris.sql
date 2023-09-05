@@ -2,31 +2,31 @@
 
 with
 
-distinct_videos as (
+join_library_with_log as (
 
     select
-        distinct video_id,
-        youtube_title,
-        youtube_channel,
-        description,
-        duration_ms
+        sl.*,
+        yl.youtube_playlist_id,
+        yl.video_id
     
-    from {{ ref('stg__youtube_videos') }}
+    from {{ ref('stg__spotify_log') }} sl
+    inner join {{ ref('stg__youtube_library') }} yl on sl.log_id = yl.id
+
 ),
 
 final as (
 
     select
         /* spotify_log */
-        sl.spotify_uri,
-        sl.spotify_playlist_id,
-        --sl.youtube_video_id,
+        sl.log_id,
+        sl.user_playlist_id, -- TODO
         sl.found_on_try,
         sl.difference_ms,
         sl.tracks_in_desc,
         sl.q,
-        --sl.search_type_id,
+        sl.search_type_id,
         sl.status,
+        sl.added_at,
 
         /* youtube_videos */
         yv.video_id,
@@ -36,31 +36,32 @@ final as (
         yv.duration_ms as youtube_duration,
 
         /* others */
-        sp.playlist_name as playlist_name,
+        sp.playlist_name,
         sty.search_type_name,
 
         /* spotify_albums or spotify_playlists_others or spotify_tracks */
         case
-            when sa.album_uri is not null       then 'album'
-            when spo.playlist_uri is not null   then 'playlist'
-            when st.track_uri is not null       then 'track'
+            when sl.album_uri is not null       then 'album'
+            when sl.playlist_uri is not null   then 'playlist'
+            when sl.track_uri is not null       then 'track'
         end as spotify_type,
 
-        coalesce(sa.album_title,    spo.playlist_title,  st.track_title)    as spotify_title, 
+        coalesce(sl.album_uri,      sl.playlist_uri,     sl.track_uri)      as spotify_uri,
+        coalesce(sa.album_title,    spo.playlist_title,  st.track_title)    as spotify_title,
         coalesce(sa.album_artists,  spo.playlist_owner,  st.track_artists)  as spotify_artists,
         coalesce(sa.duration_ms,    spo.duration_ms,     st.duration_ms)    as spotify_duration,
         coalesce(sa.total_tracks,   spo.total_tracks,    1)                 as total_tracks
         
-    from {{ ref('stg__spotify_log') }} sl
-    inner join distinct_videos yv on sl.youtube_video_id = yv.video_id
+    from join_library_with_log sl
+    inner join {{ ref('stg__youtube_videos') }} yv on sl.video_id = yv.video_id
 
-    inner join {{ ref('stg__spotify_playlists') }} sp on sl.spotify_playlist_id = sp.spotify_playlist_id
+    inner join {{ ref('stg__spotify_playlists') }} sp on sl.user_playlist_id = sp.spotify_playlist_id
     inner join {{ ref('stg__search_types') }} sty on sl.search_type_id = sty.search_type_id
 
     -- spotify_uri
-    left join {{ ref('stg__spotify_albums')}} sa            on sl.spotify_uri = sa.album_uri
-    left join {{ ref('stg__spotify_playlists_others')}} spo on sl.spotify_uri = spo.playlist_uri
-    left join {{ ref('stg__spotify_tracks' )}} st           on sl.spotify_uri = st.track_uri
+    left join {{ ref('stg__spotify_albums')}} sa            on sl.album_uri = sa.album_uri
+    left join {{ ref('stg__spotify_playlists_others')}} spo on sl.playlist_uri = spo.playlist_uri
+    left join {{ ref('stg__spotify_tracks' )}} st           on sl.track_uri = st.track_uri
 
 )
 

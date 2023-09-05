@@ -2,45 +2,36 @@
 
 with
 
-join_playlist_ids as (
+join_videos_and_playlists as (
 
     select
-        yv.video_id,
-        yv.youtube_playlist_id,
-        p.spotify_playlist_id,
+        yl.id,
 
-        coalesce(yp.playlist_name, 'Liked videos') as playlist_name,
+        yp.youtube_playlist_id,
+        yp.playlist_name,
+
+        yv.video_id,
         yv.youtube_title,
         yv.youtube_channel,
-        yv.duration_ms
-    
-    from {{ ref('stg__youtube_videos') }} yv
-    -- left joins because of nulls in youtube_playlist_id ('Liked videos') 
-    left join {{ ref('stg__youtube_playlists') }} yp on yv.youtube_playlist_id = yp.youtube_playlist_id
-    left join {{ ref('stg__playlist_ids') }} p on yv.youtube_playlist_id = p.youtube_playlist_id
+        yv.description,
+        yv.duration_ms,
+
+    from {{ ref('stg__youtube_library') }} yl
+    inner join {{ ref('stg__youtube_playlists') }} yp on yl.youtube_playlist_id = yp.youtube_playlist_id
+    inner join {{ ref('stg__youtube_videos') }} yv on yl.video_id = yv.video_id
 
 ),
 
 final as (
 
     select
-        yv.video_id,
-        yv.youtube_playlist_id,
+        s.log_id,
+        y.*
 
-        yv.playlist_name,
-        yv.youtube_title,
-        yv.youtube_channel,
-        yv.duration_ms
+    from join_videos_and_playlists y
+    left join {{ ref('stg__spotify_log') }} s on y.id = s.log_id
     
-    from join_playlist_ids yv
-
-    left join {{ ref('stg__spotify_log') }} sl
-    on yv.video_id = sl.youtube_video_id
-    and (yv.spotify_playlist_id = sl.spotify_playlist_id  or (yv.spotify_playlist_id is null and sl.spotify_playlist_id is null))
-
-    where sl.spotify_uri is null -- not found
-
-    order by yv.youtube_playlist_id, yv.youtube_title
+    where s.log_id is null
 
 )
 

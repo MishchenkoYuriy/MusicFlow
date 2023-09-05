@@ -3,7 +3,7 @@ with
 total as (
     
     select count(1) as total_cnt
-    from {{ ref('stg__youtube_videos') }}
+    from {{ ref('stg__youtube_library') }}
 
 ),
 

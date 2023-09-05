@@ -9,7 +9,7 @@ models:
           name: 'unique_combination_of_columns: log_found_videos'
           combination_of_columns:
             - video_id
-            - spotify_playlist_id
+            - user_playlist_id
       - dbt_utils.equal_rowcount:
           name: 'equal_rowcount: log_found_videos + stg__spotify_log'
           compare_model: ref('stg__spotify_log')
