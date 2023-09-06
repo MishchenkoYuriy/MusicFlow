@@ -205,8 +205,8 @@ def find_album(row) -> dict:
         q = f'album "{row["youtube_title"]}"'
         album_info = qsearch_album(row, q=q, search_type_id=2, limit=2)
 
-    if not album_info:
-        task_logger.info(f'Album "{row["youtube_title"]}" not found on Spotify')
+    # if not album_info:
+    #     task_logger.info(f'Album "{row["youtube_title"]}" not found on Spotify')
     return album_info
 
 
@@ -632,37 +632,41 @@ if __name__ == '__main__':
     log_tracks: list[tuple[str]] = []
 
     df_videos.apply(populate_spotify, axis = 1)
-    # TODO: remove warnings.warn and reduce flowtime
-    df_spotify_albums = create_df_spotify_albums(distinct_albums)
-    load_to_bigquery(df_spotify_albums, 'spotify_albums')
-    task_logger.info(f'spotify_albums uploaded to BigQuery, {len(df_spotify_albums)} rows.')
 
-    df_spotify_playlists_others = create_df_spotify_playlists_others(distinct_playlists_others)
-    load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others')
-    task_logger.info(f'spotify_playlists_others uploaded to BigQuery, {len(df_spotify_playlists_others)} rows.')
+    if distinct_albums:
+        df_spotify_albums = create_df_spotify_albums(distinct_albums)
+        load_to_bigquery(df_spotify_albums, 'spotify_albums')
+        task_logger.info(f'spotify_albums uploaded to BigQuery, {len(df_spotify_albums)} rows.')
 
-    df_spotify_tracks = create_df_spotify_tracks(distinct_tracks)
-    load_to_bigquery(df_spotify_tracks, 'spotify_tracks')
-    task_logger.info(f'spotify_tracks uploaded to BigQuery, {len(df_spotify_tracks)} rows.')
+    if distinct_playlists_others:
+        df_spotify_playlists_others = create_df_spotify_playlists_others(distinct_playlists_others)
+        load_to_bigquery(df_spotify_playlists_others, 'spotify_playlists_others')
+        task_logger.info(f'spotify_playlists_others uploaded to BigQuery, {len(df_spotify_playlists_others)} rows.')
+
+    if distinct_tracks:
+        df_spotify_tracks = create_df_spotify_tracks(distinct_tracks)
+        load_to_bigquery(df_spotify_tracks, 'spotify_tracks')
+        task_logger.info(f'spotify_tracks uploaded to BigQuery, {len(df_spotify_tracks)} rows.')
 
     # Upload logs.
-    df_spotify_log = create_df_spotify_log(log_albums, log_playlists_others, log_tracks)
-    log_schema=[
-        bigquery.SchemaField("log_id", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("album_uri", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("playlist_uri", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("track_uri", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("user_playlist_id", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("q", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("search_type_id", bigquery.enums.SqlTypeNames.INT64),
-        bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING),
-        bigquery.SchemaField("added_at", bigquery.enums.SqlTypeNames.DATETIME),
-    ]
-    load_to_bigquery(df_spotify_log, 'spotify_log', log_schema)
-    task_logger.info(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
+    if log_albums or log_playlists_others or log_tracks:
+        df_spotify_log = create_df_spotify_log(log_albums, log_playlists_others, log_tracks)
+        log_schema=[
+            bigquery.SchemaField("log_id", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("album_uri", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("playlist_uri", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("track_uri", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("user_playlist_id", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("q", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("search_type_id", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("added_at", bigquery.enums.SqlTypeNames.DATETIME),
+        ]
+        load_to_bigquery(df_spotify_log, 'spotify_log', log_schema)
+        task_logger.info(f'spotify_log uploaded to BigQuery, {len(df_spotify_log)} rows.')
 
     # Create search types.
     df_search_types = create_df_search_types()
