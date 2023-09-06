@@ -78,11 +78,11 @@ def create_spotify_playlists_from_df(row) -> str:
 def get_user_playlist_id(row) -> str:
     playlist = df_playlists[df_playlists['playlist_name'] == row['playlist_name']]
     if playlist.empty:
-        task_logger.warn(f'Spotify id not found for playlist "{row["playlist_name"]}", video "{row["youtube_title"]}" skipped.')
+        task_logger.warning(f'Spotify id not found for playlist "{row["playlist_name"]}", video "{row["youtube_title"]}" skipped.')
         return
     
     elif len(playlist) > 1:
-        task_logger.warn(f'{len(playlist)} spotify ids were found for playlist: "{row["playlist_name"]}", first id was chosen.')
+        task_logger.warning(f'{len(playlist)} spotify ids were found for playlist: "{row["playlist_name"]}", first id was chosen.')
     
     return playlist.iloc[0, 2]
 
@@ -155,11 +155,11 @@ def save_track(track_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (track_info['track_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_tracks):
         status, added_at = 'skipped (saved during the run)', None
-        task_logger.warn(f'Track "{video_title}" skipped (saved during the run)')
+        task_logger.warning(f'Track "{video_title}" skipped (saved during the run)')
 
     elif track_info['track_uri'] in liked_tracks_uri and user_playlist_id == '0':
         status, added_at = 'skipped (saved before the run)', None
-        task_logger.warn(f'Track "{video_title}" skipped (saved before the run)')
+        task_logger.warning(f'Track "{video_title}" skipped (saved before the run)')
     
     else:
         status = 'saved'
@@ -263,11 +263,11 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (album_info['album_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_albums):
         status, added_at = 'skipped (saved during the run)', None
-        task_logger.warn(f'Album "{video_title}" skipped (saved during the run)')
+        task_logger.warning(f'Album "{video_title}" skipped (saved during the run)')
     
     elif album_info['album_uri'] in liked_albums_uri and user_playlist_id == '0':
         status, added_at = 'skipped (saved before the run)', None
-        task_logger.warn(f'Album "{video_title}" skipped (saved before the run)')
+        task_logger.warning(f'Album "{video_title}" skipped (saved before the run)')
 
     else:
         status = 'saved'
@@ -419,7 +419,7 @@ def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title:
 
     else:
         status, added_at = 'skipped (saved during the run)', None
-        task_logger.warn(f'Playlist "{video_title}" skipped (saved during the run)')
+        task_logger.warning(f'Playlist "{video_title}" skipped (saved during the run)')
 
     return status, added_at
 

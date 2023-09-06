@@ -16,6 +16,8 @@ def populate_albums_uri(sp) -> list:
 
     if os.getenv('REMOVE_AFTER'): 
         remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
+    else:
+        task_logger.warning(f'REMOVE_AFTER is not definied, removing all albums...')
 
     liked_albums = sp.current_user_saved_albums()
     next_liked = liked_albums['next']

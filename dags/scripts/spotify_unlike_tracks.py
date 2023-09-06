@@ -16,6 +16,8 @@ def populate_tracks_uri(sp) -> list:
 
     if os.getenv('REMOVE_AFTER'): 
         remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
+    else:
+        task_logger.warning(f'REMOVE_AFTER is not definied, removing all tracks...')
 
     liked_tracks = sp.current_user_saved_tracks()
     next_liked = liked_tracks['next']
