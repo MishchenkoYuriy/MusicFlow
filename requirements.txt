@@ -2,6 +2,7 @@ python-dotenv==1.0.0
 pandas==2.0.3
 spotipy==2.23.0
 aniso8601==9.0.1
+requests=2.31.0
 
 google-cloud-bigquery==3.11.4
 google-cloud-bigquery[pandas]

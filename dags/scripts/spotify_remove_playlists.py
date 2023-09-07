@@ -1,6 +1,5 @@
 import re
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+import logging
 
 
 def populate_playlist_ids() -> list:
@@ -33,14 +32,19 @@ def remove(playlist_ids: list) -> None:
     '''
     for playlist_id in playlist_ids:
         sp.current_user_unfollow_playlist(playlist_id)
+    
+    task_logger.info(f'{len(playlist_ids)} playlists were removed')
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
+    task_logger = logging.getLogger("airflow.task")
+    
+    from spotify_auth import auth_with_auth_manager
     # scope = ["user-library-modify", "playlist-modify-public", "playlist-modify-private", "playlist-read-private"]
-    scope = ["user-library-modify", "playlist-modify-private"]
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
+    # scope = ["user-library-modify", "playlist-modify-private"]
+    scope = ["playlist-read-private", "playlist-modify-private", "playlist-modify-public"]
+    sp = auth_with_auth_manager(scope)
 
     playlist_ids = populate_playlist_ids()
     remove(playlist_ids)
-
-    print(f'{len(playlist_ids)} playlists were removed')

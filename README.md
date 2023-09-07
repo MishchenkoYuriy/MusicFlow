@@ -9,7 +9,10 @@ YouTube | | Spotify
 Liked videos (tracks) | &rarr; | Liked songs
 Liked videos (albums) | &rarr; | Saved albums in your Library
 Liked videos (playlists) | &rarr; | Saved playlists in your Library
-Your created playlists | &rarr; | Private, non-collaborative playlists
+Your playlists | &rarr; | Private*, non-collaborative playlists
+
+\* Spotify playlists actually have three options: public (listed on your profile), public (not listed on your profile, but accessible via link) and private (not listed on your profile, not accessible via link). The Spotify API only provides options to create the first and second playlists. Once your playlists have been created you will see 'Public Playlist' above the playlist name, which means the second option. For more information, read this [thread](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).<br>
+You can manually make a playlist private by following these steps: Open the playlist, click the three dots icon (...) at the top of the playlist (or right-click the playlist), and select Make private.
 
 ❕ On YouTube albums and playlists can be presented as single long videos (usually unofficial) or as an a set of videos. This project does not copy the latter, which are created by other users and saved in your Library (YouTube Data API does not provide methods for working with the data).
 
@@ -22,8 +25,7 @@ You may want to switch to Spotify (or at least back up your music data to Google
 I currently have 32 playlists and 550 liked music videos on YouTube, which adds up to 250 albums and 1000 tracks. From my experience of YouTube with [Enhancer](https://chrome.google.com/webstore/detail/enhancer-for-youtube/ponfpcnoihfmfllpaingbgckeeldkhle), at some point you need more options to structure your library. Creating a playlist on either YouTube Music or YouTube itself is slower than on Spotify. Spotify also wins when it comes to sorting and grouping.
 
 2. <b>Protect your music from becoming unavailable.</b><br>
-On YouTube anyone can upload their music and delete it just as easily. Today I have 80 deleted and 25 private videos, which is 10% of all my tracks. After a track is deleted or made private, you may not be able to retrieve any information to find what it was.
-<br>
+On YouTube anyone can upload their music and delete it just as easily. Today I have 80 deleted and 25 private videos, which is 10% of all my tracks. After a track is deleted or made private, you may not be able to retrieve any information to find what it was.<br>
 Some videos may not be available in your region (hidden songs in YouTube playlists or exclamation mark songs on YouTube Music), but you can still fetch them using the YouTube Data API and move to Spotify.
 
 
@@ -83,4 +85,4 @@ This project may be bad to copy:
 - Classical music
 - Clips, live performances, covers, remixes and extended versions
 
-After running `spotify_etl.py` you can check how well the search engine did by pre-made SQL queries in `analysis/`. Read more about it [here](analysis/README.md).
+When the flow is finished, you can check how well the search engine has done by looking at the pre-made analyses in `dbt/analyses/` and views in `dbt/models/marts`. Read more about this in the dbt Docs.
