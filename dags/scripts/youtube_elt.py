@@ -49,8 +49,9 @@ def get_valid_credentials():
 
         except RefreshError:
             os.unlink('token.pickle') # delete token.pickle
+            print("The refresh token has been expired after 7 days. Please reauthorise...")
             credentials = get_and_write_new_credentials()
-            print("The refresh token has been expired after 7 days. A new token has been generated.")
+            print("A new token has been generated.")
         
     return credentials
 
@@ -194,10 +195,9 @@ def populate_with_liked_videos_page(response):
                                 item['id']])
 
 
-def add_ms_duration(youtube) -> None:
+def split_to_50size_chunks(distinct_videos: dict[str, list[str]]) -> list[list[str]]:
     """
-    Split video ids into 50-size chunks, call videos().list for each chunk.
-    Extract video duration, convert it to milliseconds and store it in the distinct_videos.
+    Split video ids into 50-size chunks.
     """
     chunks: list[list[str]] = []
     chunk: list[str] = []
@@ -209,7 +209,16 @@ def add_ms_duration(youtube) -> None:
         chunk.append(video_id)
 
     chunks.append(chunk) # append the last chunk
-    
+    return chunks
+
+
+def add_ms_duration(youtube) -> None:
+    """
+    Call videos().list for each chunk in the chunks list.
+    Extract video duration, convert it to milliseconds and store it in the distinct_videos.
+    """
+    chunks = split_to_50size_chunks(distinct_videos)
+
     str_chunks: list[str] = [','.join(chunk) for chunk in chunks]
 
     for chunk_ind, str_chunk in enumerate(str_chunks):
