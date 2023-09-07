@@ -174,11 +174,13 @@ def save_track(track_info: dict, user_playlist_id: str, video_title: str):
 
 
 def log_track(track_info: dict, log_id: str, status: str, added_at) -> None:
-    distinct_tracks[track_info['track_uri']] = (track_info['album_uri'],
-                                                None,
-                                                track_info['track_title'],
-                                                track_info['track_artists'],
-                                                track_info['duration_ms'])
+    # Add to distinct_tracks only if track_uri not in distinct_tracks or playlist_uri is null (prevent losing playlist_uri)
+    if not distinct_tracks.get(track_info['track_uri']) or not distinct_tracks[track_info['track_uri']][1]:
+        distinct_tracks[track_info['track_uri']] = (track_info['album_uri'],
+                                                    None,
+                                                    track_info['track_title'],
+                                                    track_info['track_artists'],
+                                                    track_info['duration_ms'])
     
     log_tracks.append((log_id,
                        track_info['track_uri'],
@@ -269,7 +271,8 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str):
     else:
         status = 'saved'
         if user_playlist_id != '0':
-            # Add album tracks not present in the playlist to the playlist
+            # Add album tracks to the playlist
+            # If some tracks are already saved in the playlist, overwrite them
             sp.playlist_add_items(user_playlist_id, album_info['tracks_uri'])
             added_at = pd.to_datetime(datetime.utcnow())
 
@@ -294,13 +297,15 @@ def log_album(album_info: dict, log_id: str, status: str, added_at) -> None:
                                                 album_info['total_tracks'])
     
     for track_uri, title, duration_ms in album_info['tracks_info']:
-        distinct_tracks[track_uri] = (album_info['album_uri'],
-                                      None,
-                                      title,
-                                      # Same as album artists, not always correct,
-                                      # but we don't iterate for every artist on every track.
-                                      album_info['album_artists'],
-                                      duration_ms)
+        # Add to distinct_tracks only if track_uri not in distinct_tracks or playlist_uri is null (prevent losing playlist_uri)
+        if not distinct_tracks.get(track_uri) or not distinct_tracks[track_uri][1]:
+            distinct_tracks[track_uri] = (album_info['album_uri'],
+                                          None,
+                                          title,
+                                          # Same as album artists, not always correct,
+                                          # but we don't iterate for every artist on every track.
+                                          album_info['album_artists'],
+                                          duration_ms)
     
     log_albums.append((log_id,
                        album_info['album_uri'],
@@ -399,7 +404,8 @@ def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title:
     if (playlist_info['playlist_uri'], user_playlist_id) not in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others):
         status = 'saved'
         if user_playlist_id != '0':
-            # Add playlist tracks not present in the current user playlist to the current user playlist
+            # Add playlist tracks to the current user playlist
+            # If some tracks are already saved in the playlist, overwrite them
             sp.playlist_add_items(user_playlist_id, playlist_info['tracks_uri'])
             added_at = pd.to_datetime(datetime.utcnow())
 
