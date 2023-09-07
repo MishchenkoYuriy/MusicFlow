@@ -14,6 +14,25 @@ models:
           - user_playlist_id
         where:
           "status = 'saved'"
+    columns:
+      - name: spotify_type
+        tests:
+          - accepted_values:
+              values: ['album', 'playlist', 'track']
+      - name: spotify_uri
+        tests:
+          - dbt_expectations.expect_column_values_to_match_regex:
+              name: 'match_regex: int_join_spotify_uris, spotify_uri'
+              regex: "^spotify:(album|playlist|track):"
+      - name: percentage_in_desc
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              name: 'percentage_in_desc <= 100'
+              expression: "<= 100"
+          - dbt_utils.expression_is_true:
+              name: 'percentage_in_desc >= 0'
+              expression: ">= 0"
 
 
   - name: int_useful_youtube_library

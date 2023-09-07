@@ -82,6 +82,12 @@ This model contains your YouTube videos not found on Spotify.
 
 {% enddocs %}
 
+{% docs log_for_tableau %}
+
+This model contains logs without YouTube and Spotify libraries data.
+
+{% enddocs %}
+
 
 
 

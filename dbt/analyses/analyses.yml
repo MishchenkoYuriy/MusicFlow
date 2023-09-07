@@ -19,5 +19,5 @@ analyses:
     - name: how_found_statistics
       description: '{{ doc("how_found_statistics") }}'
 
-    - name: saved_during_the_run
-      description: '{{ doc("saved_during_the_run") }}'
+    - name: skipped_during_the_run
+      description: '{{ doc("skipped_during_the_run") }}'

@@ -64,15 +64,27 @@ models:
           - dbt_utils.expression_is_true:
               name: 'percentage_in_desc >= 0'
               expression: ">= 0"
-      - name: youtube_duration
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, percentage_in_desc, float64'
+              column_type: float64
+      - name: youtube_duration_timestamp
         tests:
           - not_null
-      - name: spotify_duration
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, youtube_duration_timestamp, time'
+              column_type: time
+      - name: spotify_duration_timestamp
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, spotify_duration_timestamp, time'
+              column_type: time
       - name: difference_sec
         tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, difference_sec, float64'
+              column_type: float64
 
 
   - name: log_not_found_videos
@@ -99,3 +111,58 @@ models:
       - name: duration_ms
         tests:
           - not_null
+
+
+  - name: log_for_tableau
+    description: '{{ doc("log_for_tableau") }}'
+    tests:
+      - dbt_utils.equal_rowcount:
+          name: 'equal_rowcount: log_for_tableau + stg__spotify_log'
+          compare_model: ref('stg__spotify_log')
+      - dbt_utils.expression_is_true:
+          name: 'tracks_in_desc <= total_tracks'
+          expression: "tracks_in_desc <= total_tracks"
+    columns:
+      - name: log_id
+        tests:
+          - unique
+          - not_null
+      - name: spotify_type
+        tests:
+          - not_null
+      - name: found_on_try
+        tests:
+          - not_null
+      - name: difference_ms
+        tests:
+          - not_null
+      - name: tracks_in_desc
+        tests:
+          - not_null
+      - name: total_tracks
+        tests:
+          - not_null
+      - name: search_type_name
+        tests:
+          - not_null
+      - name: status
+        tests:
+          - not_null
+      - name: percentage_in_desc
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              name: 'percentage_in_desc <= 100'
+              expression: "<= 100"
+          - dbt_utils.expression_is_true:
+              name: 'percentage_in_desc >= 0'
+              expression: ">= 0"
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, percentage_in_desc, float64'
+              column_type: float64
+      - name: difference_sec
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              name: 'column_type: log_found_videos, difference_sec, float64'
+              column_type: float64

@@ -26,11 +26,11 @@ final as (
 
         tracks_in_desc,
         total_tracks,
-        round((tracks_in_desc / total_tracks) * 100, 1) as percentage_in_desc,
+        percentage_in_desc,
 
-        time(timestamp_seconds(div(youtube_duration, 1000))) as youtube_duration,
-        time(timestamp_seconds(div(spotify_duration, 1000))) as spotify_duration,
-        round(difference_ms / 1000, 1) as difference_sec
+        youtube_duration_timestamp,
+        spotify_duration_timestamp,
+        difference_sec
 
     from {{ ref('int_join_spotify_uris') }}
 

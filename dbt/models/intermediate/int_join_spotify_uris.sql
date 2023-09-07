@@ -14,7 +14,7 @@ join_library_with_log as (
 
 ),
 
-final as (
+join_uris as (
 
     select
         /* spotify_log */
@@ -62,6 +62,45 @@ final as (
     left join {{ ref('stg__spotify_albums')}} sa            on sl.album_uri = sa.album_uri
     left join {{ ref('stg__spotify_playlists_others')}} spo on sl.playlist_uri = spo.playlist_uri
     left join {{ ref('stg__spotify_tracks' )}} st           on sl.track_uri = st.track_uri
+
+),
+
+final as (
+
+    select
+        log_id,
+        user_playlist_id, -- TODO
+        found_on_try,
+        difference_ms,
+        tracks_in_desc,
+        q,
+        search_type_id,
+        status,
+        added_at,
+
+        video_id,
+        youtube_title,
+        youtube_channel,
+        description,
+        youtube_duration,
+
+        playlist_name,
+        search_type_name,
+
+        spotify_type,
+        spotify_uri,
+        spotify_title,
+        spotify_artists,
+        spotify_duration,
+        total_tracks,
+
+        round((tracks_in_desc / total_tracks) * 100, 1) as percentage_in_desc,
+
+        time(timestamp_seconds(div(youtube_duration, 1000))) as youtube_duration_timestamp,
+        time(timestamp_seconds(div(spotify_duration, 1000))) as spotify_duration_timestamp,
+        round(difference_ms / 1000, 1) as difference_sec
+
+    from join_uris
 
 )
 

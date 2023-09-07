@@ -26,7 +26,7 @@ This analysis shows the steps the search engine takes to find an album, playlist
 
 {% enddocs %}
 
-{% docs saved_during_the_run %}
+{% docs skipped_during_the_run %}
 
 Each record represents a Spotify album, playlist or track that was found from multiple YouTube videos. The analysis can be used to checks for duplicate videos.
 
