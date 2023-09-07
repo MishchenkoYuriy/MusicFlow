@@ -4,9 +4,6 @@ import pandas as pd
 from datetime import datetime
 from dotenv import load_dotenv
 import logging
-from youtube_elt import load_to_bigquery
-from spotify_unlike_tracks import populate_tracks_uri
-from spotify_unlike_albums import populate_albums_uri
 
 from google.cloud import bigquery
 
@@ -176,7 +173,7 @@ def save_track(track_info: dict, user_playlist_id: str, video_title: str):
     return status, added_at
 
 
-def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
+def log_track(track_info: dict, log_id: str, status: str, added_at) -> None:
     distinct_tracks[track_info['track_uri']] = (track_info['album_uri'],
                                                 None,
                                                 track_info['track_title'],
@@ -185,7 +182,7 @@ def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str,
     
     log_tracks.append((log_id,
                        track_info['track_uri'],
-                       user_playlist_id,
+                       # user_playlist_id,
                        # 1, # uri_type
                        track_info['found_on_try'],
                        track_info['difference_ms'],
@@ -290,7 +287,7 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str):
     return status, added_at
 
 
-def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
+def log_album(album_info: dict, log_id: str, status: str, added_at) -> None:
     distinct_albums[album_info['album_uri']] = (album_info['album_title'],
                                                 album_info['album_artists'],
                                                 album_info['duration_ms'],
@@ -307,7 +304,7 @@ def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str,
     
     log_albums.append((log_id,
                        album_info['album_uri'],
-                       user_playlist_id,
+                       # user_playlist_id,
                        # 0, # uri_type
                        album_info['found_on_try'],
                        album_info['difference_ms'],
@@ -424,7 +421,7 @@ def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title:
     return status, added_at
 
 
-def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, status: str, added_at) -> None:
+def log_other_playlist(playlist_info: dict, log_id: str, status: str, added_at) -> None:
     distinct_playlists_others[playlist_info['playlist_uri']] = (playlist_info['playlist_title'],
                                                                 playlist_info['playlist_owner'],
                                                                 playlist_info['duration_ms'],
@@ -439,7 +436,7 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
     
     log_playlists_others.append((log_id,
                                  playlist_info['playlist_uri'],
-                                 user_playlist_id,
+                                 # user_playlist_id,
                                  # 2, # uri_type
                                  playlist_info['found_on_try'],
                                  playlist_info['difference_ms'],
@@ -467,12 +464,12 @@ def populate_spotify(row) -> None:
         album_info = find_album(row)
         if album_info:
             status, added_at = save_album(album_info, user_playlist_id, row['youtube_title'])
-            log_album(album_info, user_playlist_id, row['log_id'], status, added_at)
+            log_album(album_info, row['log_id'], status, added_at)
         else:
             playlist_info = find_other_playlist(row)
             if playlist_info:
                 status, added_at = save_other_playlist(playlist_info, user_playlist_id, row['youtube_title'])
-                log_other_playlist(playlist_info, user_playlist_id, row['log_id'], status, added_at)
+                log_other_playlist(playlist_info, row['log_id'], status, added_at)
 
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
@@ -480,7 +477,7 @@ def populate_spotify(row) -> None:
         track_info = find_track(row)
         if track_info:
             status, added_at = save_track(track_info, user_playlist_id, row['youtube_title'])
-            log_track(track_info, user_playlist_id, row['log_id'], status, added_at)
+            log_track(track_info, row['log_id'], status, added_at)
 
 
 def create_df_spotify_albums(distinct_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -531,7 +528,7 @@ def create_df_spotify_log(log_albums: list[tuple[str]],
     """
     cols = ['log_id',
             'album_uri',
-            'user_playlist_id',
+            # 'user_playlist_id',
             'found_on_try',
             'difference_ms',
             'tracks_in_desc',
@@ -582,6 +579,10 @@ def create_df_playlist_ids(df_playlists: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
+    from youtube_elt import load_to_bigquery
+    from spotify_unlike_tracks import populate_tracks_uri
+    from spotify_unlike_albums import populate_albums_uri
+    
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
     task_logger = logging.getLogger("airflow.task")
 
@@ -656,7 +657,7 @@ if __name__ == '__main__':
             bigquery.SchemaField("album_uri", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("playlist_uri", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("track_uri", bigquery.enums.SqlTypeNames.STRING),
-            bigquery.SchemaField("user_playlist_id", bigquery.enums.SqlTypeNames.STRING),
+            # bigquery.SchemaField("user_playlist_id", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
