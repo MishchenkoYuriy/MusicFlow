@@ -66,7 +66,7 @@ def auth_with_auth_manager(scope: list = ["user-library-modify", "playlist-modif
     To grant the permissions, the user is redirected to the specified SPOTIPY_REDIRECT_URI
     the first time and each time the scope is changed. Used for non-Airflow setup.
     '''
-    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope), requests_timeout=5, retries=5)
+    sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope), requests_timeout=15, retries=5)
     return sp
 
 
@@ -89,7 +89,7 @@ def auth_with_refresh_token(refresh_token):
 
     response_json = response.json()
     access_token = response_json.get('access_token')
-    sp = spotipy.Spotify(auth=access_token, requests_timeout=5, retries=5)
+    sp = spotipy.Spotify(auth=access_token, requests_timeout=15, retries=5)
     return sp
 
 

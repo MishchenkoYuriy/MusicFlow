@@ -300,7 +300,7 @@ if __name__ == '__main__':
     youtube = build("youtube", "v3", credentials=credentials)
 
     playlists = extract_user_playlists(youtube)
-    print(f"{len(playlists)} playlists were extracted")
+    print(f"{len(playlists)} playlists were extracted.")
 
     df_playlists = create_df_playlists(playlists)
     load_to_bigquery(df_playlists, 'youtube_playlists')
