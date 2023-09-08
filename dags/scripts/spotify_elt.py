@@ -1,9 +1,9 @@
 import os
 import re
 import pandas as pd
-from datetime import datetime
 from dotenv import load_dotenv
 import logging
+from collections import defaultdict
 
 from google.cloud import bigquery
 
@@ -36,16 +36,14 @@ def extract_videos() -> pd.DataFrame:
     sql = f"""
     SELECT
         yl.id as log_id,
-        yp.playlist_name,
-
+        yl.youtube_playlist_id,
+        
         yv.youtube_title,
         yv.youtube_channel,
         lower(yv.description) description,
         yv.duration_ms
     
     FROM `{project_id}.marts.youtube_library` yl
-
-    INNER JOIN `{project_id}.marts.youtube_playlists` yp ON yl.youtube_playlist_id = yp.youtube_playlist_id 
     INNER JOIN `{project_id}.marts.youtube_videos` yv ON yl.video_id = yv.video_id
 
     ORDER BY yl.id
@@ -60,10 +58,13 @@ def get_user_id() -> str:
     return user_info['id']
 
 
-def create_spotify_playlists_from_df(row) -> str:
+def create_user_playlists_from_df(row) -> str:
     """
     Create private, non-collaborative Spotify playlists from the dataframe.
     Save created playlist ids as a column in the original dataframe.
+
+    The user playlists are created beforehand to get unique Spotify ids, which are used to store found Spotify URIs.
+    Using playlist names to store the URIs can result in lost playlist(s) if there are two or more user playlists with the same name.
     """
     if row['youtube_playlist_id'] != '0':
         playlist = sp.user_playlist_create(user_id, row['playlist_name'], public=False, collaborative=False)
@@ -73,14 +74,7 @@ def create_spotify_playlists_from_df(row) -> str:
 
 
 def get_user_playlist_id(row) -> str:
-    playlist = df_playlists[df_playlists['playlist_name'] == row['playlist_name']]
-    if playlist.empty:
-        task_logger.warning(f'Spotify id not found for playlist "{row["playlist_name"]}", video "{row["youtube_title"]}" skipped.')
-        return
-    
-    elif len(playlist) > 1:
-        task_logger.warning(f'{len(playlist)} spotify ids were found for playlist: "{row["playlist_name"]}", first id was chosen.')
-    
+    playlist = df_playlists[df_playlists['youtube_playlist_id'] == row['youtube_playlist_id']]    
     return playlist.iloc[0, 2]
 
 
@@ -162,11 +156,11 @@ def save_track(track_info: dict, user_playlist_id: str, video_title: str):
         status = 'saved'
         if user_playlist_id != '0':
             # Add the track to the playlist
-            sp.playlist_add_items(user_playlist_id, [track_info['track_uri']])
+            if track_info['track_uri'] not in playlist_items[user_playlist_id]:
+                playlist_items[user_playlist_id].append(track_info['track_uri'])
         
         else:
             # Like the track
-            # sp.current_user_saved_tracks_add([track_info['track_uri']])
             tracks_to_like.append(track_info['track_uri'])
     
     return status
@@ -269,19 +263,11 @@ def save_album(album_info: dict, user_playlist_id: str, video_title: str):
     else:
         status = 'saved'
         if user_playlist_id != '0':
-            # Add album tracks to the playlist
-            # If some tracks are already saved in the playlist, overwrite them
-            sp.playlist_add_items(user_playlist_id, album_info['tracks_uri'])
-
-            # Save the album to current user library
-            # sp.current_user_saved_albums_add([album_info['album_uri']])
+            # Add album tracks to the playlist and also remove duplicates
+            playlist_items[user_playlist_id].extend(uri for uri in album_info['tracks_uri'] if uri not in playlist_items[user_playlist_id])
         
         else:
-            # Like all tracks in the album (may cause overlike)
-            # sp.current_user_saved_tracks_add(album_info['tracks_uri'])
-
-            # Save the album to current user library
-            # sp.current_user_saved_albums_add([album_info['album_uri']])
+            # Like the album
             albums_to_like.append(album_info['album_uri'])
 
     return status
@@ -400,19 +386,11 @@ def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title:
     if (playlist_info['playlist_uri'], user_playlist_id) not in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others):
         status = 'saved'
         if user_playlist_id != '0':
-            # Add playlist tracks to the current user playlist
-            # If some tracks are already saved in the playlist, overwrite them
-            sp.playlist_add_items(user_playlist_id, playlist_info['tracks_uri'])
-
-            # Save the playlist to current user library
-            # sp.current_user_follow_playlist(playlist_info['playlist_id'])
+            # Add playlist tracks to the current user playlist and also remove duplicates
+            playlist_items[user_playlist_id].extend(uri for uri in playlist_info['tracks_uri'] if uri not in playlist_items[user_playlist_id])
         
         else:
-            # Like all tracks in the playlist (may cause overlike)
-            # sp.current_user_saved_tracks_add(playlist_info['tracks_uri'])
-
-            # Save the playlist to current user library
-            # sp.current_user_follow_playlist(playlist_info['playlist_id'])
+            # Like the playlist
             playlists_to_like.append(playlist_info['playlist_id'])
 
     else:
@@ -447,14 +425,9 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
                                  status))
 
 
-def populate_spotify(row) -> None:
+def prepare_spotify(row) -> None:
     """
-    Find albums and tracks on Spotify, like or add them to the created playlists.
-
-    Return:
-        dict: a skeleton for df_spotify_catalog dataframe.
-        If the first video is not found and populate_playlists returns None,
-        df_spotify_catalog will be a Series.
+    Find albums, playlists and tracks on Spotify, prepare URIs to like or add to user playlists, populate logs.
     """
     user_playlist_id = get_user_playlist_id(row)
 
@@ -515,6 +488,22 @@ def like_tracks(tracks_to_like: list[str]) -> None:
             sp.current_user_saved_tracks_add(uris)
         
         task_logger.info(f'{len(tracks_to_like)} tracks have been liked.')
+
+
+def populate_user_playlists(playlist_items: dict[str, list[str]]) -> None:
+    """
+    Save all URIs in the playlist_items to the user playlists.
+    1 user playlist and 50 tracks per API call.
+    """
+    for user_playlist_id, tracks_uri in playlist_items.items():
+        chunks = split_to_50size_chunks(tracks_uri)
+
+        for uris in chunks:
+            sp.playlist_add_items(user_playlist_id, uris) # duplicates may arise
+        
+        playlist = df_playlists[df_playlists['spotify_playlist_id'] == user_playlist_id]
+        playlist_name = playlist.iloc[0, 1]
+        task_logger.info(f'Playlist "{playlist_name}" has been filled with {len(tracks_uri)} tracks.')
 
 
 def create_df_spotify_albums(distinct_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -620,7 +609,7 @@ if __name__ == '__main__':
     from spotify_unlike_tracks import populate_tracks_uri
     from spotify_unlike_albums import populate_albums_uri
     
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
     task_logger = logging.getLogger("airflow.task")
 
     # Extract dataframes from BigQuery.
@@ -649,7 +638,7 @@ if __name__ == '__main__':
     task_logger.info('Tracks and albums URI were collected.')
 
     # Create Spotify playlists.
-    df_playlists['spotify_playlist_id'] = df_playlists.apply(create_spotify_playlists_from_df, axis = 1)
+    df_playlists['spotify_playlist_id'] = df_playlists.apply(create_user_playlists_from_df, axis = 1)
     task_logger.info(f'{len(df_playlists)} playlists were added.')
 
     df_spotify_playlists = create_df_spotify_playlists(df_playlists)
@@ -668,16 +657,20 @@ if __name__ == '__main__':
     albums_to_like: list[str] = []
     playlists_to_like: list[str] = []
     tracks_to_like: list[str] = []
+    playlist_items: dict[str, list[str]] = defaultdict(list)
 
     log_albums: list[tuple[str]] = []
     log_playlists_others: list[tuple[str]] = []
     log_tracks: list[tuple[str]] = []
 
-    df_videos.apply(populate_spotify, axis = 1)
+    df_videos.apply(prepare_spotify, axis = 1)
+
     like_albums(albums_to_like)
     like_playlists(playlists_to_like)
     like_tracks(tracks_to_like)
+    populate_user_playlists(playlist_items)
 
+    # Load to BigQuery.
     if distinct_albums:
         df_spotify_albums = create_df_spotify_albums(distinct_albums)
         load_to_bigquery(df_spotify_albums, 'spotify_albums')
@@ -709,7 +702,6 @@ if __name__ == '__main__':
             bigquery.SchemaField("album_uri", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("playlist_uri", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("track_uri", bigquery.enums.SqlTypeNames.STRING),
-            # bigquery.SchemaField("user_playlist_id", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
