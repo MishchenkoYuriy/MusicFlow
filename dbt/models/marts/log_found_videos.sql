@@ -5,7 +5,6 @@ with
 final as (
 
     select
-        added_at,
         video_id,
         user_playlist_id,
 

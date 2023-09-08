@@ -14,19 +14,30 @@ join_library_with_log as (
 
 ),
 
+join_user_playlist_id as (
+
+    select
+        l.*,
+        p.spotify_playlist_id as user_playlist_id
+    
+    from join_library_with_log l
+    inner join {{ ref('stg__youtube_playlists') }} yp on l.youtube_playlist_id = yp.youtube_playlist_id
+    inner join {{ ref('stg__playlist_ids')}} p on yp.youtube_playlist_id = p.youtube_playlist_id
+
+),
+
 join_uris as (
 
     select
         /* spotify_log */
         sl.log_id,
-        sl.user_playlist_id, -- TODO
+        sl.user_playlist_id,
         sl.found_on_try,
         sl.difference_ms,
         sl.tracks_in_desc,
         sl.q,
         sl.search_type_id,
         sl.status,
-        sl.added_at,
 
         /* youtube_videos */
         yv.video_id,
@@ -52,7 +63,7 @@ join_uris as (
         coalesce(sa.duration_ms,    spo.duration_ms,     st.duration_ms)    as spotify_duration,
         coalesce(sa.total_tracks,   spo.total_tracks,    1)                 as total_tracks
         
-    from join_library_with_log sl
+    from join_user_playlist_id sl
     inner join {{ ref('stg__youtube_videos') }} yv on sl.video_id = yv.video_id
 
     inner join {{ ref('stg__spotify_playlists') }} sp on sl.user_playlist_id = sp.spotify_playlist_id
@@ -69,14 +80,13 @@ final as (
 
     select
         log_id,
-        user_playlist_id, -- TODO
+        user_playlist_id,
         found_on_try,
         difference_ms,
         tracks_in_desc,
         q,
         search_type_id,
         status,
-        added_at,
 
         video_id,
         youtube_title,

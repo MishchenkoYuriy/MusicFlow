@@ -9,14 +9,12 @@ final as (
         album_uri,
         playlist_uri,
         track_uri,
-        user_playlist_id, -- TODO
         found_on_try,
         difference_ms,
         tracks_in_desc,
         q,
         search_type_id,
-        status,
-        added_at
+        status
     
     from {{ source('marts_sources', 'spotify_log') }}
 )

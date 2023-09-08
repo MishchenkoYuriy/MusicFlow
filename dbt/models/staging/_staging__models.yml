@@ -138,15 +138,6 @@ models:
           - relationships:
               to: ref('stg__spotify_tracks')
               field: track_uri
-      - name: user_playlist_id # TODO
-        tests:
-          - not_null
-          - dbt_expectations.expect_column_values_to_be_of_type:
-              name: 'column_type: stg__spotify_log, user_playlist_id, string'
-              column_type: string
-          - relationships:
-              to: ref('stg__spotify_playlists')
-              field: spotify_playlist_id
       - name: found_on_try
         tests:
           - not_null
@@ -196,14 +187,6 @@ models:
               column_type: string
           - accepted_values:
               values: ['saved', 'skipped (saved before the run)', 'skipped (saved during the run)']
-      - name: added_at
-        tests:
-          - not_null:
-              name: 'not_null: stg__spotify_log, added_at, exclude skipped'
-              where: "status = 'saved'"
-          - dbt_expectations.expect_column_values_to_be_of_type:
-              name: 'column_type: stg__spotify_log, status, datetime'
-              column_type: datetime
 
 
   - name: stg__spotify_playlists
