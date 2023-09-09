@@ -1,10 +1,13 @@
 import os
 import re
 import logging
-from dotenv import load_dotenv
 from datetime import datetime
 
-load_dotenv()
+try: from .spotify_auth import auth_with_refresh_token
+except: from spotify_auth import auth_with_refresh_token
+
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
+task_logger = logging.getLogger("airflow.task")
 
 
 def populate_albums_uri(sp) -> list:
@@ -17,7 +20,7 @@ def populate_albums_uri(sp) -> list:
     if os.getenv('REMOVE_AFTER'): 
         remove_after = datetime.strptime(os.getenv('REMOVE_AFTER'), '%Y-%m-%d %H:%M:%S')
     else:
-        task_logger.warning(f'REMOVE_AFTER is not definied, removing all albums...')
+        task_logger.warning(f'REMOVE_AFTER is not definied, removing all liked albums...')
 
     liked_albums = sp.current_user_saved_albums()
     next_liked = liked_albums['next']
@@ -53,17 +56,17 @@ def unlike_albums(sp, albums_uri: list) -> None:
     for chunk in chunks:
         sp.current_user_saved_albums_delete(chunk)
     
-    task_logger.info(f'{len(albums_uri)} liked albums were removed')
+    task_logger.info(f'{len(albums_uri)} liked albums have been removed.')
+
+
+def main(refresh_token):
+    sp = auth_with_refresh_token(refresh_token)
+    albums_uri = populate_albums_uri(sp)
+    unlike_albums(sp, albums_uri)
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s')
-    task_logger = logging.getLogger("airflow.task")
+    from dotenv import load_dotenv
+    load_dotenv()
 
-    from spotify_auth import auth_with_auth_manager
-    # scope = ["user-library-read", "user-library-modify"]
-    # sp = spotipy.Spotify(auth_manager=SpotifyOAuth(scope=scope))
-
-    sp = auth_with_auth_manager(["user-library-read", "user-library-modify"])
-    albums_uri = populate_albums_uri(sp)
-    unlike_albums(sp, albums_uri)
+    main(os.getenv('REFRESH_TOKEN'))

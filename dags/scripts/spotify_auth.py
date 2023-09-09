@@ -4,10 +4,6 @@ import requests
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth, SpotifyClientCredentials
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 
 def print_auth_url(scope: str = 'user-library-modify,playlist-modify-private') -> None:
     '''
@@ -94,5 +90,8 @@ def auth_with_refresh_token(refresh_token):
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     print_auth_url()
     # get_refresh_token(os.getenv('AUTH_CODE'))
