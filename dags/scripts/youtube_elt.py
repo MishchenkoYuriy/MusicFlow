@@ -4,6 +4,7 @@ Google OAuth 2.0      OAuth 2.0 provides authenticated access to an API.
 '''
 
 import os
+# import re
 import pickle
 import aniso8601
 import pandas as pd
@@ -19,13 +20,17 @@ from google.auth.exceptions import RefreshError
 load_dotenv()
 
 
-def get_and_write_new_credentials():
+def get_new_credentials():
+    """
+    Create the read-only OAuth credentials from the
+    `client_secrets.json`. Return and write the credentials to
+    `token.pickle`. Redirection is required.
+    """
     client_secrets_path = os.getenv('CLIENT_SECRETS_PATH')
     flow = InstalledAppFlow.from_client_secrets_file(client_secrets_path,
                                                      scopes=["https://www.googleapis.com/auth/youtube.readonly"])
     credentials = flow.run_local_server(port=4040, authorization_prompt_message='')
 
-    # write new credentials to token.pickle
     with open('token.pickle', 'wb') as f:
         pickle.dump(credentials, f)
 
@@ -33,6 +38,9 @@ def get_and_write_new_credentials():
 
 
 def get_valid_credentials():
+    """
+    Return the valid credentials.
+    """
     credentials = None
 
     if os.path.exists('token.pickle'):
@@ -40,7 +48,7 @@ def get_valid_credentials():
             credentials = pickle.load(token)
     
     if not credentials: # credentials not exist
-        credentials = get_and_write_new_credentials()
+        credentials = get_new_credentials()
         print("A refresh token has been created.")
     
     elif not credentials.valid:
@@ -50,7 +58,7 @@ def get_valid_credentials():
         except RefreshError:
             os.unlink('token.pickle') # delete token.pickle
             print("The refresh token has been expired after 7 days. Please reauthorise...")
-            credentials = get_and_write_new_credentials()
+            credentials = get_new_credentials()
             print("A new token has been generated.")
         
     return credentials
@@ -58,8 +66,7 @@ def get_valid_credentials():
 
 def extract_user_playlists(youtube) -> dict[str, str]:
     """
-    Return a dictionary object that contains playlist ids and titles
-    of all music playlists created by current user.
+    Return a dictionary of music playlists created by the current user.
     """
     request = youtube.playlists().list(
         part="snippet,contentDetails",
@@ -79,24 +86,14 @@ def extract_user_playlists(youtube) -> dict[str, str]:
 
 def extract_videos(youtube, playlists: dict[str, str]) -> None:
     """
-    Populate:
-        distinct_videos: dictionary that contains unique videos.
-        Key is video id, values are list of title, channel name, description and duration in ms.
-
-        youtube_library: a list that maps playlist id to video id (both are strings).
-        `Liked videos` are included as a pseudo playlist with id equal to '0'.
+    Extract videos from retrieved playlists and fill distinct_videos
+    and youtube_library with them.
     """
     extract_videos_from_playlists(youtube, playlists)
     extract_liked_videos(youtube)
 
 
 def extract_videos_from_playlists(youtube, playlists: dict[str, str]) -> None:
-    """
-    Extract videos from your playlists and store them in distinct_videos and youtube_library.
-
-    Args:
-        playlists: iterable object that contains playlist ids
-    """
     for playlist_id in playlists:
     
         response = get_playlist_items_page(youtube, playlist_id)
@@ -106,13 +103,10 @@ def extract_videos_from_playlists(youtube, playlists: dict[str, str]) -> None:
             response = get_playlist_items_page(youtube, playlist_id, response['nextPageToken'])
             populate_with_playlist_items_page(response, playlist_id)
     
-    add_ms_duration(youtube)
+    add_duration_ms(youtube)
 
 
 def extract_liked_videos(youtube) -> None:
-    """
-    Extract your liked videos and store them in distinct_videos and youtube_library.
-    """
     response = get_liked_videos_page(youtube)
     populate_with_liked_videos_page(response)
 
@@ -182,14 +176,24 @@ def populate_with_playlist_items_page(response, playlist_id: str) -> None:
 
 def populate_with_liked_videos_page(response):
     for item in response['items']:
-        # deleted and private videos actomaticly excluded by YouTube Data API
+        # deleted and private videos automatically excluded by YouTube Data API
         iso8601_duration = item['contentDetails']['duration']
         duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
 
+        """
+        Cleaning liked videos:
+        - remove albums with cyrillic in the title or with categories other than 'Music', 'People & Blogs'
+        - remove tracks with irrelevant categories
+        """
+        # if (duration_ms >= int(os.getenv('THRESHOLD_MS')) and not re.search('[а-яёА-ЯЁ]', item['snippet']['title']) and item['snippet']['categoryId'] in ('10', '22')) or \
+        #    (duration_ms < int(os.getenv('THRESHOLD_MS')) and item['snippet']['categoryId'] in ('10', '22', '1', '19', '20', '24', '27')):
+
         distinct_videos[item['id']] = [item['snippet']['title'],
-                                       item['snippet']['channelTitle'],
-                                       item['snippet']['description'],
-                                       duration_ms]
+                                        item['snippet']['channelTitle'],
+                                        item['snippet']['description'],
+                                        # item['snippet']['categoryId'],
+                                        # item['snippet'].get('tags', []),
+                                        duration_ms]
 
         youtube_library.append(['0', # id of Liked videos
                                 item['id']])
@@ -212,10 +216,11 @@ def split_to_50size_chunks(distinct_videos: dict[str, list[str]]) -> list[list[s
     return chunks
 
 
-def add_ms_duration(youtube) -> None:
+def add_duration_ms(youtube) -> None:
     """
     Call videos().list for each chunk in the chunks list.
-    Extract video duration, convert it to milliseconds and store it in the distinct_videos.
+    Extract duration, convert it to milliseconds and store it
+    in the distinct_videos.
     """
     chunks = split_to_50size_chunks(distinct_videos)
 
@@ -231,12 +236,14 @@ def add_ms_duration(youtube) -> None:
             iso8601_duration = item['contentDetails']['duration']
             duration_ms = int(aniso8601.parse_duration(iso8601_duration).total_seconds()*1000)
             
+            # distinct_videos[video_id].append(item['snippet']['categoryId'])
+            # distinct_videos[video_id].append(item['snippet'].get('tags', []))
             distinct_videos[video_id].append(duration_ms)
 
 
 def create_df_playlists(playlists: dict[str, str]) -> pd.DataFrame:
     """
-    Return a playlists dataframe from a playlist dictionary.
+    Return a playlist dataframe from a playlist dictionary.
     """
     playlists_series = pd.Series(playlists)
     df_playlists = pd.DataFrame(playlists_series, 
@@ -253,12 +260,14 @@ def create_df_playlists(playlists: dict[str, str]) -> pd.DataFrame:
 
 def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
     """
-    Return a df_videos dataframe from a distinct_videos dictionary.
+    Return a video dataframe from a video dictionary.
     """
     df_videos = pd.DataFrame.from_dict(distinct_videos, orient='index',
                                        columns=['youtube_title',
                                                 'youtube_channel',
                                                 'description',
+                                                # 'category_id',
+                                                # 'tags',
                                                 'duration_ms']) \
                                         .reset_index(names='video_id')
     return df_videos
@@ -266,7 +275,7 @@ def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
 
 def create_df_youtube_library(youtube_library: list[list[str]]) -> pd.DataFrame:
     """
-    Return a df_youtube_library dataframe from a youtube_library list.
+    Return a library dataframe from a youtube_library list.
     """
     df_youtube_library = pd.DataFrame(youtube_library,
                                       columns=['youtube_playlist_id',
@@ -306,8 +315,8 @@ if __name__ == '__main__':
     load_to_bigquery(df_playlists, 'youtube_playlists')
     print(f'youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows.')
 
-    distinct_videos: dict[str, list[str]] = {}
-    youtube_library: list[list[str]] = []
+    distinct_videos: dict[str, list[str]] = {} # youtube_videos: dictionary that contains unique videos
+    youtube_library: list[list[str]] = [] # list that maps playlist id to video id (both are strings)
     extract_videos(youtube, playlists)
 
     df_videos = create_df_videos(distinct_videos)
