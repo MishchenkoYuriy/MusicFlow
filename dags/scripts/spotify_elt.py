@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from dotenv import load_dotenv
 import logging
+from datetime import datetime
 from collections import defaultdict
 
 from google.cloud import bigquery
@@ -46,6 +47,7 @@ def extract_videos() -> pd.DataFrame:
     FROM `{project_id}.marts.youtube_library` yl
     INNER JOIN `{project_id}.marts.youtube_videos` yv ON yl.video_id = yv.video_id
 
+    WHERE yv.duration_ms >= {threshold_ms}
     ORDER BY yl.id
     """ # WHERE yv.duration_ms < {threshold_ms}
 
@@ -73,14 +75,25 @@ def create_user_playlists_from_df(row) -> str:
         return '0'
 
 
+def fix_youtube_title(youtube_title: str) -> str:
+    """
+    Enhance title string to better search in Spotify.
+    """
+    # TODO youtube_title = re.sub('&', 'and', youtube_title)
+
+    # Remove all brackets and the content inside.
+    # Examples: [Full Album], (Full EP), (2021), 【Complete】
+    youtube_title = re.sub(r'(\((.*?)\)|\[(.*?)\]|【(.*?)】)', '', youtube_title)
+
+    return youtube_title
+
+
 def get_user_playlist_id(row) -> str:
     playlist = df_playlists[df_playlists['youtube_playlist_id'] == row['youtube_playlist_id']]    
     return playlist.iloc[0, 2]
 
 
 def find_track(row) -> dict:
-    # youtube_title = re.sub('&', 'and', row['youtube_title'])
-
     # First try, depends on whether it is a Topic Channel
     if ' - Topic' in row['youtube_channel']:
         artist = re.sub(' - Topic', '', row['youtube_channel'])
@@ -142,7 +155,7 @@ def qsearch_track(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_track(track_info: dict, user_playlist_id: str, video_title: str):
+def collect_track(track_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (track_info['track_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_tracks):
         status = 'skipped (saved during the run)'
@@ -178,7 +191,6 @@ def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str)
     log_tracks.append((log_id,
                        track_info['track_uri'],
                        user_playlist_id,
-                       # 1, # uri_type
                        track_info['found_on_try'],
                        track_info['difference_ms'],
                        track_info['tracks_in_desc'],
@@ -188,16 +200,19 @@ def log_track(track_info: dict, user_playlist_id: str, log_id: str, status: str)
 
 
 def find_album(row) -> dict:
+    youtube_title = fix_youtube_title(row["youtube_title"])
+    album_info = qsearch_album(row, q=youtube_title, search_type_id=0, limit=1)
+    
+    if not album_info:
+        q = f'album "{youtube_title}"'
+        album_info = qsearch_album(row, q=q, search_type_id=1, limit=1)
+    
     # First try, just video title
-    album_info = qsearch_album(row, q=row["youtube_title"], search_type_id=1, limit=2)
+    if not album_info:
+        album_info = qsearch_album(row, q=row["youtube_title"], search_type_id=2, limit=1)
 
     # Second try, album + space + album name in quotes
-    if not album_info:
-        q = f'album "{row["youtube_title"]}"'
-        album_info = qsearch_album(row, q=q, search_type_id=2, limit=2)
 
-    # if not album_info:
-    #     task_logger.info(f'Album "{row["youtube_title"]}" not found on Spotify')
     return album_info
 
 
@@ -222,13 +237,11 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
             
             album_length += track['duration_ms']
             diff -= track['duration_ms']
-            if diff < -max_diff:
-                break
         
-        percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a diffrence in few tracks
+        percent_in_desc = (tracks_in_desc / len(tracks_uri)) * 100 # in case a albums are same with a difference in few tracks
         
-        # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
-        if (abs(diff) < max_diff) or (len(tracks_uri) >= 4 and percent_in_desc >= 70):
+        # Difference in 40 seconds or 60%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
+        if (abs(diff) < max_diff) or (len(tracks_uri) >= 4 and percent_in_desc >= 60):
             task_logger.info(f'Album "{row["youtube_title"]}" found on try {album_num}, '
                              f'difference: {round(diff / 1000)} seconds, '
                              f'{tracks_in_desc} of {len(tracks_uri)} track titles '
@@ -250,7 +263,7 @@ def qsearch_album(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_album(album_info: dict, user_playlist_id: str, video_title: str):
+def collect_album(album_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (album_info['album_uri'], user_playlist_id) in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_albums):
         status = 'skipped (saved during the run)'
@@ -293,7 +306,6 @@ def log_album(album_info: dict, user_playlist_id: str, log_id: str, status: str)
     log_albums.append((log_id,
                        album_info['album_uri'],
                        user_playlist_id,
-                       # 0, # uri_type
                        album_info['found_on_try'],
                        album_info['difference_ms'],
                        album_info['tracks_in_desc'],
@@ -351,14 +363,12 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
                 
                 playlist_length += track['track']['duration_ms']
                 diff -= track['track']['duration_ms']
-                if diff < -max_diff:
-                    break
 
         total_tracks = len(tracks_uri)
-        percent_in_desc = (tracks_in_desc / total_tracks) * 100 # in case a playlist are same with a diffrence in few tracks
+        percent_in_desc = (tracks_in_desc / total_tracks) * 100 # in case a playlist are same with a difference in few tracks
         
-        # Difference in 40 seconds or 70%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
-        if (abs(diff) < max_diff) or (total_tracks >= 4 and percent_in_desc >= 70):
+        # Difference in 40 seconds or 60%+ tracks found in the YouTube video description (only if the total number of tracks is objective)
+        if (abs(diff) < max_diff) or (total_tracks >= 4 and percent_in_desc >= 60):
             task_logger.info(f'Playlist "{row["youtube_title"]}" found on try {playlist_num}, '
                              f'difference: {round(diff / 1000)} seconds, '
                              f'{tracks_in_desc} of {total_tracks} track titles '
@@ -381,7 +391,7 @@ def qsearch_playlist(row, q: str, search_type_id: str, limit: int) -> dict:
             }
 
 
-def save_other_playlist(playlist_info: dict, user_playlist_id: str, video_title: str):
+def collect_other_playlist(playlist_info: dict, user_playlist_id: str, video_title: str):
     # search with primary key
     if (playlist_info['playlist_uri'], user_playlist_id) not in ((uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others):
         status = 'saved'
@@ -416,7 +426,6 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
     log_playlists_others.append((log_id,
                                  playlist_info['playlist_uri'],
                                  user_playlist_id,
-                                 # 2, # uri_type
                                  playlist_info['found_on_try'],
                                  playlist_info['difference_ms'],
                                  playlist_info['tracks_in_desc'],
@@ -427,7 +436,7 @@ def log_other_playlist(playlist_info: dict, user_playlist_id: str, log_id: str, 
 
 def prepare_spotify(row) -> None:
     """
-    Find albums, playlists and tracks on Spotify, prepare URIs to like or add to user playlists, populate logs.
+    Find albums, playlists and tracks on Spotify, collect URIs to like or add to user playlists, populate logs.
     """
     user_playlist_id = get_user_playlist_id(row)
 
@@ -436,12 +445,12 @@ def prepare_spotify(row) -> None:
     if os.getenv('THRESHOLD_MS') and row['duration_ms'] >= int(os.getenv('THRESHOLD_MS')):
         album_info = find_album(row)
         if album_info:
-            status = save_album(album_info, user_playlist_id, row['youtube_title'])
+            status = collect_album(album_info, user_playlist_id, row['youtube_title'])
             log_album(album_info, user_playlist_id, row['log_id'], status)
         else:
             playlist_info = find_other_playlist(row)
             if playlist_info:
-                status = save_other_playlist(playlist_info, user_playlist_id, row['youtube_title'])
+                status = collect_other_playlist(playlist_info, user_playlist_id, row['youtube_title'])
                 log_other_playlist(playlist_info, user_playlist_id, row['log_id'], status)
 
     # TRACK
@@ -449,7 +458,7 @@ def prepare_spotify(row) -> None:
     else:
         track_info = find_track(row)
         if track_info:
-            status = save_track(track_info, user_playlist_id, row['youtube_title'])
+            status = collect_track(track_info, user_playlist_id, row['youtube_title'])
             log_track(track_info, user_playlist_id, row['log_id'], status)
 
 
@@ -605,17 +614,18 @@ def create_df_playlist_ids(df_playlists: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == '__main__':
+    begin = datetime.now()
     from youtube_elt import load_to_bigquery, split_to_50size_chunks
     from spotify_unlike_tracks import populate_tracks_uri
     from spotify_unlike_albums import populate_albums_uri
     
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
+    logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
     task_logger = logging.getLogger("airflow.task")
 
     # Extract dataframes from BigQuery.
     df_playlists = extract_playlists()
     df_videos = extract_videos()
-    task_logger.info(f'Datasets were extracted from BigQuery.')
+    task_logger.info(f'Datasets have been extracted from BigQuery.')
 
     # Authorisation.
     from spotify_auth import auth_with_auth_manager, auth_with_refresh_token
@@ -635,11 +645,11 @@ if __name__ == '__main__':
     '''
     liked_tracks_uri = populate_tracks_uri(sp)
     liked_albums_uri = populate_albums_uri(sp)
-    task_logger.info('Tracks and albums URI were collected.')
+    task_logger.info('Tracks and albums URI have been collected.')
 
     # Create Spotify playlists.
     df_playlists['spotify_playlist_id'] = df_playlists.apply(create_user_playlists_from_df, axis = 1)
-    task_logger.info(f'{len(df_playlists)} playlists were added.')
+    task_logger.info(f'{len(df_playlists)} playlists have been created.')
 
     df_spotify_playlists = create_df_spotify_playlists(df_playlists)
     load_to_bigquery(df_spotify_playlists, 'spotify_playlists')
@@ -650,15 +660,17 @@ if __name__ == '__main__':
     task_logger.info(f'playlist_ids uploaded to BigQuery.')
 
     # Populate Spotify.
-    distinct_albums: dict[str, tuple[str]] = {}
-    distinct_playlists_others: dict[str, tuple[str]] = {}
-    distinct_tracks: dict[str, tuple[str]] = {}
+    distinct_albums: dict[str, tuple[str]] = {} # spotify_albums
+    distinct_playlists_others: dict[str, tuple[str]] = {} # spotify_playlists_others
+    distinct_tracks: dict[str, tuple[str]] = {} # spotify_tracks
 
+    # temp storages:
     albums_to_like: list[str] = []
     playlists_to_like: list[str] = []
     tracks_to_like: list[str] = []
     playlist_items: dict[str, list[str]] = defaultdict(list)
 
+    # spotify_log (divided to optimise the search for entries saved during the run)
     log_albums: list[tuple[str]] = []
     log_playlists_others: list[tuple[str]] = []
     log_tracks: list[tuple[str]] = []
@@ -716,3 +728,5 @@ if __name__ == '__main__':
     df_search_types = create_df_search_types()
     load_to_bigquery(df_search_types, 'search_types')
     task_logger.info(f'search_types uploaded to BigQuery.')
+    end = datetime.now()
+    task_logger.debug(f'Flow took {end - begin}')
