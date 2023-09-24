@@ -33,25 +33,66 @@ log_playlists_others: list[tuple[str]] = []
 log_tracks: list[tuple[str]] = []
 
 
-def extract_playlists() -> pd.DataFrame:
+def extract_your_playlists() -> pd.DataFrame:
     project_id = os.getenv("PROJECT_ID")
+    your_channel_name = os.getenv("YOUR_CHANNEL_NAME")
     client = bigquery.Client(project=project_id)
 
     sql = f"""
     SELECT
         youtube_playlist_id,
-        playlist_name
+        title
     
     FROM `{project_id}.marts.youtube_playlists`
-    ORDER BY playlist_name
+    WHERE author = '{your_channel_name}' or youtube_playlist_id = 'LM'
+    ORDER BY title
     """
 
     df_playlists = client.query(sql).to_dataframe()
     return df_playlists
 
 
-def extract_videos() -> pd.DataFrame:
+def extract_other_playlists() -> pd.DataFrame:
     project_id = os.getenv("PROJECT_ID")
+    your_channel_name = os.getenv("YOUR_CHANNEL_NAME")
+    client = bigquery.Client(project=project_id)
+
+    sql = f"""
+    SELECT
+        ap.youtube_playlist_id,
+        ap.type,
+        ap.title,
+        ap.author,
+        ap.year,
+        count(av.video_id) as total_tracks,
+        array_agg(lower(av.title) order by al.id) as track_titles,
+        array_agg(al.id order by al.id) as log_ids,
+        sum(av.duration_ms) as duration_ms
+    
+    FROM `{project_id}.marts.youtube_playlists` ap
+
+    INNER JOIN `{project_id}.marts.youtube_library` al
+    on ap.youtube_playlist_id = al.youtube_playlist_id
+
+    INNER JOIN `{project_id}.marts.youtube_videos` av
+    on al.video_id = av.video_id
+
+    WHERE ap.author != '{your_channel_name}'
+
+    GROUP BY ap.youtube_playlist_id, ap.type, ap.title, ap.author, ap.year
+    """
+
+    df_playlists_others = client.query(sql).to_dataframe()
+    return df_playlists_others
+
+
+def extract_videos() -> pd.DataFrame:
+    """
+    Extract videos from 'Your Likes' and
+    playlists created by the current user.
+    """
+    project_id = os.getenv("PROJECT_ID")
+    your_channel_name = os.getenv("YOUR_CHANNEL_NAME")
     threshold_ms = os.getenv("THRESHOLD_MS")
     client = bigquery.Client(project=project_id)
 
@@ -60,16 +101,21 @@ def extract_videos() -> pd.DataFrame:
         yl.id as log_id,
         yl.youtube_playlist_id,
         
-        yv.youtube_title,
-        yv.youtube_channel,
-        lower(yv.description) description,
+        yv.title,
+        yv.author,
+        yv.description,
         yv.duration_ms
     
     FROM `{project_id}.marts.youtube_library` yl
+
     INNER JOIN `{project_id}.marts.youtube_videos` yv
     ON yl.video_id = yv.video_id
 
-    WHERE yv.duration_ms >= {threshold_ms}
+    INNER JOIN `{project_id}.marts.youtube_playlists` yp
+    ON yl.youtube_playlist_id = yp.youtube_playlist_id
+
+    WHERE (yp.author = '{your_channel_name}' or yp.youtube_playlist_id = 'LM')
+
     ORDER BY yl.id
     """  # WHERE yv.duration_ms < {threshold_ms}
 
@@ -92,26 +138,29 @@ def create_user_playlists_from_df(row, sp, user_id) -> str:
     Using playlist names to store the URIs can result in lost playlist(s)
     if there are two or more user playlists with the same name.
     """
-    if row["youtube_playlist_id"] != "0":
+    if row["youtube_playlist_id"] != "LM":
         playlist = sp.user_playlist_create(
-            user_id, row["playlist_name"], public=False, collaborative=False
+            user_id, row["title"], public=False, collaborative=False
         )
         return playlist["id"]
     else:
-        return "0"
+        return "LM"
 
 
-def fix_youtube_title(youtube_title: str) -> str:
+def fix_title(title: str) -> str:
     """
     Enhance title string to better search in Spotify.
     """
-    # TODO youtube_title = re.sub('&', 'and', youtube_title)
+    # TODO title = re.sub('&', 'and', title)
 
-    # Remove all brackets and the content inside.
+    # Remove all brackets and the content inside
     # Examples: [Full Album], (Full EP), (2021), 【Complete】
-    youtube_title = re.sub(r"(\((.*?)\)|\[(.*?)\]|【(.*?)】)", "", youtube_title)
+    title = re.sub(r"(\((.*?)\)|\[(.*?)\]|【(.*?)】)", "", title)
 
-    return youtube_title
+    # Drop pipes (|)
+    title = re.sub("\|", "", title)
+
+    return title
 
 
 def get_user_playlist_id(row, df_playlists: pd.DataFrame) -> str:
@@ -123,31 +172,29 @@ def get_user_playlist_id(row, df_playlists: pd.DataFrame) -> str:
 
 def find_track(row, sp) -> dict:
     # First try, depends on whether it is a Topic Channel
-    if " - Topic" in row["youtube_channel"]:
-        artist = re.sub(" - Topic", "", row["youtube_channel"])
+    if " - Topic" in row["author"]:
+        artist = re.sub(" - Topic", "", row["author"])
         artist = re.sub("'", " ", artist)
 
-        q = f'track:{row["youtube_title"]} artist:{artist}'
+        q = f'track:{row["title"]} artist:{artist}'
         track_info = qsearch_track(row, sp, q=q, search_type_id=0, limit=2)
 
     else:
-        track_info = qsearch_track(
-            row, q=row["youtube_title"], search_type_id=1, limit=2
-        )
+        track_info = qsearch_track(row, sp, q=row["title"], search_type_id=1, limit=2)
 
     # Second try, track + space + track name in quotes
     if not track_info:
-        q = f'track "{row["youtube_title"]}"'
+        q = f'track "{row["title"]}"'
         track_info = qsearch_track(row, sp, q=q, search_type_id=2, limit=2)
 
     # Third try, channel name + space + track title
     if not track_info:
-        artist = re.sub(" - Topic", "", row["youtube_channel"])
-        q = f'{artist} {row["youtube_title"]}'
+        artist = re.sub(" - Topic", "", row["author"])
+        q = f'{artist} {row["title"]}'
         track_info = qsearch_track(row, sp, q=q, search_type_id=3, limit=2)
 
     if not track_info:
-        logger.info(f'Track "{row["youtube_title"]}" not found on Spotify')
+        logger.info(f'Track "{row["title"]}" not found on Spotify')
     return track_info
 
 
@@ -160,19 +207,17 @@ def qsearch_track(row, sp, q: str, search_type_id: str, limit: int) -> dict:
 
         for artist in track["artists"]:
             artists.append(artist["name"])
-            if (
-                artist["name"].lower() in row["youtube_title"].lower()
-            ):  # case-insensitive match
+            if artist["name"].lower() in row["title"].lower():
                 artists_in_title += 1
 
-        if track["name"].lower() in row["youtube_title"].lower():
+        if track["name"].lower() in row["title"].lower():
             track_in_title = 1
 
         # Difference in 5 seconds or both track name and
         # at least one artist presented in video title:
         if diff <= 5000 or (track_in_title and artists_in_title):
             logger.info(
-                f'Track "{row["youtube_title"]}" found on try: {track_num}, '
+                f'Track "{row["title"]}" found on try: {track_num}, '
                 f"difference: {round(diff / 1000)} seconds. "
             )
 
@@ -184,7 +229,7 @@ def qsearch_track(row, sp, q: str, search_type_id: str, limit: int) -> dict:
                 "duration_ms": track["duration_ms"],
                 "found_on_try": track_num,
                 "difference_ms": abs(diff),
-                "tracks_in_desc": 1,
+                "track_match": 1,
                 "q": q,
                 "search_type_id": search_type_id,
             }
@@ -200,13 +245,13 @@ def collect_track(
         status = "skipped (saved during the run)"
         logger.warning(f'Track "{video_title}" skipped (saved during the run)')
 
-    elif track_info["track_uri"] in liked_tracks_uri and user_playlist_id == "0":
+    elif track_info["track_uri"] in liked_tracks_uri and user_playlist_id == "LM":
         status = "skipped (saved before the run)"
         logger.warning(f'Track "{video_title}" skipped (saved before the run)')
 
     else:
         status = "saved"
-        if user_playlist_id != "0":
+        if user_playlist_id != "LM":
             # Add the track to the playlist
             if track_info["track_uri"] not in playlist_items[user_playlist_id]:
                 playlist_items[user_playlist_id].append(track_info["track_uri"])
@@ -242,7 +287,7 @@ def log_track(
             user_playlist_id,
             track_info["found_on_try"],
             track_info["difference_ms"],
-            track_info["tracks_in_desc"],
+            track_info["track_match"],
             track_info["q"],
             track_info["search_type_id"],
             status,
@@ -251,20 +296,31 @@ def log_track(
 
 
 def find_album(row, sp) -> dict:
-    youtube_title = fix_youtube_title(row["youtube_title"])
-    album_info = qsearch_album(row, sp, q=youtube_title, search_type_id=0, limit=1)
+    fixed_title = fix_title(row["title"])
+    album_info = qsearch_album(row, sp, q=fixed_title, search_type_id=0, limit=1)
 
     if not album_info:
-        q = f'album "{youtube_title}"'
+        q = f'album "{fixed_title}"'
         album_info = qsearch_album(row, sp, q=q, search_type_id=1, limit=1)
 
-    # First try, just video title
-    if not album_info:
-        album_info = qsearch_album(
-            row, sp, q=row["youtube_title"], search_type_id=2, limit=1
-        )
+    # Try with raw title if title was changed
+    if not album_info and fixed_title != row["title"]:
+        album_info = qsearch_album(row, sp, q=row["title"], search_type_id=2, limit=1)
 
-    # Second try, album + space + album name in quotes
+    return album_info
+
+
+def find_album_extended(row, sp) -> dict:
+    album_info = find_album(row, sp)
+
+    if not album_info:
+        fixed_title = fix_title(row["title"])
+        q = f'{row["author"]} {fixed_title}'
+        album_info = qsearch_album(row, sp, q=q, search_type_id=3, limit=1)
+
+    if not album_info and row["year"]:
+        q = f'{row["author"]} {fixed_title} year:{row["year"]}'
+        album_info = qsearch_album(row, sp, q=q, search_type_id=4, limit=1)
 
     return album_info
 
@@ -279,13 +335,20 @@ def qsearch_album(row, sp, q: str, search_type_id: str, limit: int) -> dict:
             tuple[str, str, int]
         ] = []  # (track uri, track title, track duration ms)
         diff = row["duration_ms"]
-        tracks_in_desc = 0
+        track_match = 0
         album_length = 0
 
         tracks = sp.album(album["uri"])
         for track in tracks["tracks"]["items"]:
-            if track["name"].lower() in row["description"]:  # case-insensitive match
-                tracks_in_desc += 1
+            # Extracted with YouTube Data API ("description" exists):
+            if 'description' in row.index:
+                if track["name"].lower() in row["description"].lower():
+                    track_match += 1
+            # extracted with ytmusicapi ("track_titles" exists):
+            else:
+                # if found track title like any track title in the YouTube album:
+                if [t for t in row["track_titles"] if track["name"].lower() in t]:
+                    track_match += 1
 
             tracks_uri.append(track["uri"])
             tracks_info.append((track["uri"], track["name"], track["duration_ms"]))
@@ -293,19 +356,28 @@ def qsearch_album(row, sp, q: str, search_type_id: str, limit: int) -> dict:
             album_length += track["duration_ms"]
             diff -= track["duration_ms"]
 
-        percent_in_desc = (
-            tracks_in_desc / len(tracks_uri)
+        total_tracks = row.get("total_tracks", len(tracks_uri))
+        match_percent = (
+            track_match / total_tracks
         ) * 100  # in case a albums are same with a difference in few tracks
 
-        # Difference in 40 seconds or 60%+ tracks found
-        # in the YouTube video description
-        # (only if the total number of tracks is objective)
-        if (abs(diff) < max_diff) or (len(tracks_uri) >= 4 and percent_in_desc >= 60):
+        # Album is considered found if one of three conditions is satisfied:
+        # 1. Found title like YouTube title and artist like YouTube artist
+        # 2. Difference in 40 seconds
+        # 3. 60%+ tracks found (only if the total number of tracks is objective)
+        if (
+            (
+                album["name"] in row["title"]
+                and album["artists"][0]["name"] in row["author"]
+            )
+            or (abs(diff) < max_diff)
+            or (total_tracks >= 4 and match_percent >= 60)
+        ):
             logger.info(
-                f'Album "{row["youtube_title"]}" found on try {album_num}, '
+                f'Album "{row["title"]}" found on try {album_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
-                f"{tracks_in_desc} of {len(tracks_uri)} track titles "
-                f"({round(percent_in_desc)}%) found in the YouTube video description."
+                f"{track_match} of {total_tracks} track titles "
+                f"({round(match_percent)}%) found."
             )
 
             return {
@@ -317,10 +389,10 @@ def qsearch_album(row, sp, q: str, search_type_id: str, limit: int) -> dict:
                     artist["name"] for artist in album["artists"]
                 ),
                 "duration_ms": album_length,
-                "total_tracks": len(tracks_uri),
+                "total_tracks": total_tracks,
                 "found_on_try": album_num,
                 "difference_ms": abs(diff),
-                "tracks_in_desc": tracks_in_desc,
+                "track_match": track_match,
                 "q": q,
                 "search_type_id": search_type_id,
             }
@@ -336,13 +408,13 @@ def collect_album(
         status = "skipped (saved during the run)"
         logger.warning(f'Album "{video_title}" skipped (saved during the run)')
 
-    elif album_info["album_uri"] in liked_albums_uri and user_playlist_id == "0":
+    elif album_info["album_uri"] in liked_albums_uri and user_playlist_id == "LM":
         status = "skipped (saved before the run)"
         logger.warning(f'Album "{video_title}" skipped (saved before the run)')
 
     else:
         status = "saved"
-        if user_playlist_id != "0":
+        if user_playlist_id != "LM":
             # Add album tracks to the playlist and also remove duplicates
             playlist_items[user_playlist_id].extend(
                 uri
@@ -388,7 +460,7 @@ def log_album(
             user_playlist_id,
             album_info["found_on_try"],
             album_info["difference_ms"],
-            album_info["tracks_in_desc"],
+            album_info["track_match"],
             album_info["q"],
             album_info["search_type_id"],
             status,
@@ -397,24 +469,33 @@ def log_album(
 
 
 def find_other_playlist(row, sp) -> dict:
-    # First try, just video title
-    playlist_info = qsearch_playlist(
-        row, sp, q=row["youtube_title"], search_type_id=1, limit=2
-    )
+    fixed_title = fix_title(row["title"])
+    pl_info = qsearch_playlist(row, sp, q=fixed_title, search_type_id=0, limit=1)
 
-    # Second try, playlist + space + playlist name in quotes
-    if not playlist_info:
-        q = f'playlist "{row["youtube_title"]}"'
-        playlist_info = qsearch_playlist(row, sp, q=q, search_type_id=2, limit=2)
+    if not pl_info:
+        q = f'playlist "{fixed_title}"'
+        pl_info = qsearch_playlist(row, sp, q=q, search_type_id=1, limit=1)
 
-    # Third try, channel name + space + playlist title
-    if not playlist_info:
-        q = f'{row["youtube_channel"]} {row["youtube_title"]}'
-        playlist_info = qsearch_playlist(row, sp, q=q, search_type_id=3, limit=2)
+    # Try with raw title if title was changed
+    if not pl_info and fixed_title != row["title"]:
+        pl_info = qsearch_playlist(row, sp, q=row["title"], search_type_id=2, limit=1)
 
-    if not playlist_info:
-        logger.info(f'Album/Playlist "{row["youtube_title"]}" not found on Spotify')
-    return playlist_info
+    return pl_info
+
+
+def find_other_playlist_extended(row, sp) -> dict:
+    pl_info = find_other_playlist(row, sp)
+
+    if not pl_info:
+        fixed_title = fix_title(row["title"])
+        q = f'{row["author"]} {fixed_title}'
+        pl_info = qsearch_album(row, sp, q=q, search_type_id=3, limit=1)
+
+    if not pl_info and row["year"]:
+        q = f'{row["author"]} {fixed_title} year:{row["year"]}'
+        pl_info = qsearch_album(row, sp, q=q, search_type_id=4, limit=1)
+
+    return pl_info
 
 
 def qsearch_playlist(row, sp, q: str, search_type_id: str, limit: int) -> dict:
@@ -427,17 +508,24 @@ def qsearch_playlist(row, sp, q: str, search_type_id: str, limit: int) -> dict:
             tuple[str, str, int]
         ] = []  # (track uri, track title, track duration ms)
         diff = row["duration_ms"]
-        tracks_in_desc = 0
+        track_match = 0
         playlist_length = 0
 
         tracks = sp.playlist(playlist["uri"])
         for track in tracks["tracks"]["items"]:
             artists = []
             if track.get("track", ""):
-                if (
-                    track["track"]["name"].lower() in row["description"]
-                ):  # case-insensitive match
-                    tracks_in_desc += 1
+                track_title = track["track"]["name"]
+                # Extracted with YouTube Data API ("description" exists):
+                if 'description' in row.index:
+                    if track_title.lower() in row["description"].lower():
+                        track_match += 1
+
+                # extracted with ytmusicapi ("track_titles" exists):
+                else:
+                    # if found track title like any track title in the YouTube album:
+                    if [t for t in row["track_titles"] if track_title.lower() in t]:
+                        track_match += 1
 
                 for artist in track["track"]["artists"]:
                     artists.append(artist["name"])
@@ -456,19 +544,19 @@ def qsearch_playlist(row, sp, q: str, search_type_id: str, limit: int) -> dict:
                 playlist_length += track["track"]["duration_ms"]
                 diff -= track["track"]["duration_ms"]
 
-        total_tracks = len(tracks_uri)
-        percent_in_desc = (
-            tracks_in_desc / total_tracks
+        total_tracks = row.get("total_tracks", len(tracks_uri))
+        match_percent = (
+            track_match / total_tracks
         ) * 100  # in case a playlist are same with a difference in few tracks
 
         # Difference in 40 seconds or 60%+ tracks found in the YouTube
         # video description (only if the total number of tracks is objective)
-        if (abs(diff) < max_diff) or (total_tracks >= 4 and percent_in_desc >= 60):
+        if (abs(diff) < max_diff) or (total_tracks >= 4 and match_percent >= 60):
             logger.info(
-                f'Playlist "{row["youtube_title"]}" found on try {playlist_num}, '
+                f'Playlist "{row["title"]}" found on try {playlist_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
-                f"{tracks_in_desc} of {total_tracks} track titles "
-                f"({round(percent_in_desc)}%) found in the YouTube video description."
+                f"{track_match} of {total_tracks} track titles "
+                f"({round(match_percent)}%) found."
             )
 
             return {
@@ -482,7 +570,7 @@ def qsearch_playlist(row, sp, q: str, search_type_id: str, limit: int) -> dict:
                 "total_tracks": total_tracks,
                 "found_on_try": playlist_num,
                 "difference_ms": abs(diff),
-                "tracks_in_desc": tracks_in_desc,
+                "track_match": track_match,
                 "q": q,
                 "search_type_id": search_type_id,
             }
@@ -496,7 +584,7 @@ def collect_other_playlist(
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others
     ):
         status = "saved"
-        if user_playlist_id != "0":
+        if user_playlist_id != "LM":
             # Add playlist tracks to the current user playlist and
             # also remove duplicates
             playlist_items[user_playlist_id].extend(
@@ -544,7 +632,7 @@ def log_other_playlist(
             user_playlist_id,
             playlist_info["found_on_try"],
             playlist_info["difference_ms"],
-            playlist_info["tracks_in_desc"],
+            playlist_info["track_match"],
             playlist_info["q"],
             playlist_info["search_type_id"],
             status,
@@ -552,7 +640,7 @@ def log_other_playlist(
     )
 
 
-def prepare_spotify(
+def prepare_videos(
     row, sp, df_playlists: pd.DataFrame, liked_albums_uri: list, liked_tracks_uri: list
 ) -> None:
     """
@@ -570,18 +658,21 @@ def prepare_spotify(
         album_info = find_album(row, sp)
         if album_info:
             status = collect_album(
-                album_info, user_playlist_id, row["youtube_title"], liked_albums_uri
+                album_info, user_playlist_id, row["title"], liked_albums_uri
             )
             log_album(album_info, user_playlist_id, row["log_id"], status)
         else:
             playlist_info = find_other_playlist(row, sp)
             if playlist_info:
                 status = collect_other_playlist(
-                    playlist_info, user_playlist_id, row["youtube_title"]
+                    playlist_info, user_playlist_id, row["title"]
                 )
                 log_other_playlist(
                     playlist_info, user_playlist_id, row["log_id"], status
                 )
+            
+            if not playlist_info:
+                logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify')
 
     # TRACK
     # either THRESHOLD_MS is not specified or the duration of the video is less than it
@@ -589,9 +680,34 @@ def prepare_spotify(
         track_info = find_track(row, sp)
         if track_info:
             status = collect_track(
-                track_info, user_playlist_id, row["youtube_title"], liked_tracks_uri
+                track_info, user_playlist_id, row["title"], liked_tracks_uri
             )
             log_track(track_info, user_playlist_id, row["log_id"], status)
+
+
+def prepare_playlists_others(row, sp, liked_albums_uri) -> None:
+    """
+    Find albums, EPs and playlists of other users.
+    """
+    # if row["type"] == "Album" or row["type"] == "EP":  # TODO: research Spotify EPs
+    album_info = find_album_extended(row, sp)
+    if album_info:
+        status = collect_album(album_info, "LM", row["title"], liked_albums_uri)
+        for log_id in row["log_ids"]:
+            log_album(album_info, None, log_id, status)
+            # TODO album not found
+
+    # elif row["type"] == "Playlist":
+    else:
+        playlist_info = find_other_playlist(row, sp)
+        if playlist_info:
+            status = collect_other_playlist(playlist_info, "LM", row["title"])
+            for log_id in row["log_ids"]:
+                log_other_playlist(playlist_info, None, log_id, status)
+                # TODO playlist not found
+
+        if not playlist_info:
+            logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify')
 
 
 def like_albums(sp, albums_to_like: list[str]) -> None:
@@ -638,17 +754,20 @@ def populate_user_playlists(
     Save all URIs in the playlist_items to the user playlists.
     1 user playlist and 50 tracks per API call.
     """
-    for user_playlist_id, tracks_uri in playlist_items.items():
-        chunks = split_to_50size_chunks(tracks_uri)
+    if playlist_items:
+        for user_playlist_id, tracks_uri in playlist_items.items():
+            chunks = split_to_50size_chunks(tracks_uri)
 
-        for uris in chunks:
-            sp.playlist_add_items(user_playlist_id, uris)  # duplicates may arise
+            for uris in chunks:
+                sp.playlist_add_items(user_playlist_id, uris)  # duplicates may arise
 
-        playlist = df_playlists[df_playlists["spotify_playlist_id"] == user_playlist_id]
-        playlist_name = playlist.iloc[0, 1]
-        logger.info(
-            f'Playlist "{playlist_name}" has been filled with {len(tracks_uri)} tracks.'
-        )
+            playlist = df_playlists[
+                df_playlists["spotify_playlist_id"] == user_playlist_id
+            ]
+            title = playlist.iloc[0, 1]
+            logger.info(
+                f'Playlist "{title}" has been filled with {len(tracks_uri)} tracks.'
+            )
 
 
 def create_df_spotify_albums(distinct_albums: dict[str, tuple[str]]) -> pd.DataFrame:
@@ -709,7 +828,7 @@ def create_df_spotify_log(
         "user_playlist_id",
         "found_on_try",
         "difference_ms",
-        "tracks_in_desc",
+        "track_match",
         "q",
         "search_type_id",
         "status",
@@ -734,10 +853,11 @@ def create_df_spotify_log(
 
 def create_df_search_types() -> pd.DataFrame:
     search_types = {
-        0: "colons",
-        1: "title only",
-        2: "keyword and quotes",
-        3: "channel name and title",
+        0: "title (fixed)",
+        1: "keyword and title in quotes",
+        2: "title (raw)",
+        3: "author and title (fixed)",
+        4: "colons (year)",
     }
 
     df_search_types = pd.DataFrame.from_dict(
@@ -748,7 +868,7 @@ def create_df_search_types() -> pd.DataFrame:
 
 
 def create_df_spotify_playlists(df_playlists: pd.DataFrame) -> pd.DataFrame:
-    df_spotify_playlists = df_playlists[["spotify_playlist_id", "playlist_name"]]
+    df_spotify_playlists = df_playlists[["spotify_playlist_id", "title"]]
 
     return df_spotify_playlists
 
@@ -764,7 +884,8 @@ def create_df_playlist_ids(df_playlists: pd.DataFrame) -> pd.DataFrame:
 def main():
     begin = datetime.now()
     # Extract dataframes from BigQuery:
-    df_playlists = extract_playlists()
+    df_playlists = extract_your_playlists()
+    df_playlists_others = extract_other_playlists()
     df_videos = extract_videos()
     logger.info("Datasets have been extracted from BigQuery.")
 
@@ -804,9 +925,13 @@ def main():
     logger.info("playlist_ids uploaded to BigQuery.")
 
     df_videos.apply(
-        prepare_spotify,
+        prepare_videos,
         axis=1,
         args=[sp, df_playlists, liked_albums_uri, liked_tracks_uri],
+    )
+
+    df_playlists_others.apply(
+        prepare_playlists_others, axis=1, args=[sp, liked_albums_uri]
     )
 
     like_albums(sp, albums_to_like)
@@ -859,7 +984,7 @@ def main():
             bigquery.SchemaField("track_uri", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
-            bigquery.SchemaField("tracks_in_desc", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("track_match", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("q", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("search_type_id", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING),
