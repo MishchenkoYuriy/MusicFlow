@@ -4,21 +4,19 @@ Google OAuth 2.0      OAuth 2.0 provides authenticated access to an API.
 """
 
 import os
-from datetime import datetime
 
 # import re
-
 import pickle
+from datetime import datetime
+
 import aniso8601
 import pandas as pd
 from dotenv import load_dotenv
-
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-from google.cloud import bigquery
 from google.auth.exceptions import RefreshError
-
+from google.auth.transport.requests import Request
+from google.cloud import bigquery
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
 
 load_dotenv()
 
@@ -75,7 +73,7 @@ def get_valid_credentials():
     return credentials
 
 
-def extract_user_playlists(youtube) -> dict[str, str]:
+def extract_user_playlists(youtube) -> dict[str, list[str]]:
     """
     Return a dictionary of music playlists created by the current user.
     """
@@ -84,16 +82,21 @@ def extract_user_playlists(youtube) -> dict[str, str]:
     )
     response = request.execute()
 
-    playlists: dict[str, str] = {}
+    playlists: dict[str, list[str]] = {}
 
     for item in response["items"]:
         if "💼" not in item["snippet"]["title"]:  # remove non-music playlists
-            playlists[item["id"]] = item["snippet"]["title"]
+            playlists[item["id"]] = [
+                "Playlist",
+                item["snippet"]["title"],
+                item["snippet"]["channelTitle"],
+                None,
+            ]
 
     return playlists
 
 
-def extract_videos(youtube, playlists: dict[str, str]) -> None:
+def extract_videos(youtube, playlists: dict[str, list[str]]) -> None:
     """
     Extract videos from retrieved playlists and fill distinct_videos
     and youtube_library with them.
@@ -102,7 +105,7 @@ def extract_videos(youtube, playlists: dict[str, str]) -> None:
     extract_liked_videos(youtube)
 
 
-def extract_videos_from_playlists(youtube, playlists: dict[str, str]) -> None:
+def extract_videos_from_playlists(youtube, playlists: dict[str, list[str]]) -> None:
     for playlist_id in playlists:
         response = get_playlist_items_page(youtube, playlist_id)
         populate_with_playlist_items_page(response, playlist_id)
@@ -212,7 +215,7 @@ def populate_with_liked_videos_page(response):
             duration_ms,
         ]
 
-        youtube_library.append(["0", item["id"]])
+        youtube_library.append(["LM", item["id"]])
 
 
 def split_to_50size_chunks(distinct_videos: dict[str, list[str]]) -> list[list[str]]:
@@ -259,17 +262,23 @@ def add_duration_ms(youtube) -> None:
             distinct_videos[video_id].append(duration_ms)
 
 
-def create_df_playlists(playlists: dict[str, str]) -> pd.DataFrame:
+def create_df_playlists(playlists: dict[str, list[str]]) -> pd.DataFrame:
     """
     Return a playlist dataframe from a playlist dictionary.
     """
-    playlists_series = pd.Series(playlists)
-    df_playlists = pd.DataFrame(
-        playlists_series, columns=["playlist_name"]
+    df_playlists = pd.DataFrame.from_dict(
+        playlists, orient="index", columns=["type", "title", "author", "year"]
     ).reset_index(names="youtube_playlist_id")
 
     liked = pd.DataFrame(
-        {"youtube_playlist_id": "0", "playlist_name": "Liked videos"}, index=[0]
+        {
+            "youtube_playlist_id": "LM",
+            "type": "Playlist",
+            "title": "Your Likes",
+            "author": None,
+            "year": None,
+        },
+        index=[0],
     )
 
     df_playlists = pd.concat([df_playlists, liked], ignore_index=True)
@@ -285,8 +294,8 @@ def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
         distinct_videos,
         orient="index",
         columns=[
-            "youtube_title",
-            "youtube_channel",
+            "title",
+            "author",
             "description",
             # 'category_id',
             # 'tags',
