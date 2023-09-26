@@ -55,7 +55,7 @@ def auth_with_client_credentials():
     """
     The Client Credentials flow is used in server-to-server
     authentication. Without user authentication and access to their
-    information. Not used in this project.
+    information.
     """
     client_id = os.getenv("SPOTIPY_CLIENT_ID")
     client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
@@ -72,7 +72,7 @@ def auth_with_auth_manager(scope: list):
     The authorisation code flow includes user authentication.
     To grant the permissions, the user is redirected to the specified
     SPOTIPY_REDIRECT_URI the first time and each time the scope is
-    changed. Used for non-Airflow setup.
+    changed.
     """
     if not scope:
         scope = ["user-library-modify", "playlist-modify-private"]
@@ -86,8 +86,6 @@ def auth_with_refresh_token(refresh_token):
     """
     A user authentication that uses the refresh token to generate
     an access token for a session. Prevent user input altogether.
-    The refresh token must be set as an Airflow Variable. Used for
-    Airflow setup.
     """
     client_id = os.getenv("SPOTIPY_CLIENT_ID")
     client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")

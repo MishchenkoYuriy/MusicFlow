@@ -11,11 +11,12 @@ except:
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    filename="logs/clean_spotify.log",
 )
 logger = logging.getLogger(__name__)
 
 
-def populate_tracks_uri(sp) -> list:
+def populate_tracks_uri(sp) -> list[str]:
     """
     Return a list of liked tracks URI for the current user.
     """
@@ -50,12 +51,9 @@ def populate_tracks_uri(sp) -> list:
     return tracks_uri
 
 
-def unlike_tracks(sp, tracks_uri: list) -> None:
+def unlike_tracks(sp, tracks_uri: list[str]) -> None:
     """
     Unlike all tracks from the list of tracks URI.
-    Split the liked tracks into 50-size chunks and call
-    current_user_saved_tracks_delete on each one.
-    current_user_saved_tracks_delete has a limit of 50 tracks
     """
     chunks = [tracks_uri[i : i + 50] for i in range(0, len(tracks_uri), 50)]
 
@@ -66,6 +64,9 @@ def unlike_tracks(sp, tracks_uri: list) -> None:
 
 
 def main(refresh_token):
+    """
+    Clean `Liked songs` on Spotify based on `REMOVE_AFTER`.
+    """
     sp = auth_with_refresh_token(refresh_token)
     tracks_uri = populate_tracks_uri(sp)
     unlike_tracks(sp, tracks_uri)

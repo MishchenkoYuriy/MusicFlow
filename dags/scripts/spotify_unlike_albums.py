@@ -11,11 +11,12 @@ except:
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    filename="logs/clean_spotify.log",
 )
 logger = logging.getLogger(__name__)
 
 
-def populate_albums_uri(sp) -> list:
+def populate_albums_uri(sp) -> list[str]:
     """
     Return a list of liked albums URI for the current user.
     """
@@ -50,12 +51,9 @@ def populate_albums_uri(sp) -> list:
     return albums_uri
 
 
-def unlike_albums(sp, albums_uri: list) -> None:
+def unlike_albums(sp, albums_uri: list[str]) -> None:
     """
     Unlike all albums from the list of albums URI.
-    Split the liked albums into 50-size chunks
-    and call current_user_saved_albums_delete on each one.
-    current_user_saved_albums_delete has a limit of 50 albums
     """
     chunks = [albums_uri[i : i + 50] for i in range(0, len(albums_uri), 50)]
 
@@ -66,6 +64,9 @@ def unlike_albums(sp, albums_uri: list) -> None:
 
 
 def main(refresh_token):
+    """
+    Remove liked albums on Spotify based on `REMOVE_AFTER`.
+    """
     sp = auth_with_refresh_token(refresh_token)
     albums_uri = populate_albums_uri(sp)
     unlike_albums(sp, albums_uri)

@@ -10,11 +10,12 @@ except:
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    filename="logs/clean_spotify.log",
 )
 logger = logging.getLogger(__name__)
 
 
-def populate_playlist_ids(sp) -> list:
+def populate_playlist_ids(sp) -> list[str]:
     """
     Return a list that contains IDs of current user playlists
     and liked other users' playlists.
@@ -39,7 +40,7 @@ def populate_playlist_ids(sp) -> list:
     return playlist_ids
 
 
-def unfollow_playlists(sp, playlist_ids: list) -> None:
+def unfollow_playlists(sp, playlist_ids: list[str]) -> None:
     """
     Unfollow all playlists from the list of IDs.
     """
@@ -50,6 +51,9 @@ def unfollow_playlists(sp, playlist_ids: list) -> None:
 
 
 def main(refresh_token):
+    """
+    Remove (unfollow) liked or created playlists on Spotify.
+    """
     sp = auth_with_refresh_token(refresh_token)
     playlist_ids = populate_playlist_ids(sp)
     unfollow_playlists(sp, playlist_ids)

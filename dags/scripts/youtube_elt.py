@@ -3,6 +3,7 @@ API key               An API key is a unique string that lets you access an API.
 Google OAuth 2.0      OAuth 2.0 provides authenticated access to an API.
 """
 
+import logging
 import os
 
 # import re
@@ -18,19 +19,29 @@ from google.cloud import bigquery
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    filename="logs/youtube_elt.log",
+)
+
+logging.getLogger("googleapiclient").setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
+
+
 load_dotenv()
 
 # youtube_videos: dictionary that contains unique videos
 distinct_videos: dict[str, list[str]] = {}
 # list that maps playlist id to video id (both are strings)
-youtube_library: list[list[str]] = []
+youtube_library: list[tuple[str]] = []
 
 
-def get_new_credentials():
+def get_new_oauth_credential():
     """
-    Create the read-only OAuth credentials from the
-    `client_secrets.json`. Return and write the credentials to
-    `token.pickle`. Redirection is required.
+    Return read-only OAuth credentials and write them to `token.pickle`.
+    Require the user to manually authenticate in the browser.
     """
     client_secrets_path = os.getenv("CLIENT_SECRETS_PATH")
     flow = InstalledAppFlow.from_client_secrets_file(
@@ -44,9 +55,9 @@ def get_new_credentials():
     return credentials
 
 
-def get_valid_credentials():
+def get_valid_oauth_credentials():
     """
-    Return the valid credentials.
+    Return valid OAuth credentials.
     """
     credentials = None
 
@@ -55,8 +66,8 @@ def get_valid_credentials():
             credentials = pickle.load(token)
 
     if not credentials:  # credentials not exist
-        credentials = get_new_credentials()
-        print("A refresh token has been created.")
+        credentials = get_new_oauth_credential()
+        logger.info("A refresh token has been created.")
 
     elif not credentials.valid:
         try:
@@ -64,18 +75,22 @@ def get_valid_credentials():
 
         except RefreshError:
             os.unlink("token.pickle")  # delete token.pickle
-            print(
+            logger.info(
                 "The refresh token has been expired after 7 days. Please reauthorise..."
             )
-            credentials = get_new_credentials()
-            print("A new token has been generated.")
+            credentials = get_new_oauth_credential()
+            logger.info("A new token has been generated.")
 
     return credentials
 
 
 def extract_user_playlists(youtube) -> dict[str, list[str]]:
     """
-    Return a dictionary of music playlists created by the current user.
+    Extract the current user's playlists
+    (i.e., those created by the user) on YouTube.
+
+    Return a dictionary with keys as identifiers
+    and values as lists with playlist info (type, title, author, year).
     """
     request = youtube.playlists().list(
         part="snippet,contentDetails", maxResults=50, mine=True
@@ -96,16 +111,15 @@ def extract_user_playlists(youtube) -> dict[str, list[str]]:
     return playlists
 
 
-def extract_videos(youtube, playlists: dict[str, list[str]]) -> None:
+def extract_playlist_items(youtube, playlists: dict[str, list[str]]) -> None:
     """
-    Extract videos from retrieved playlists and fill distinct_videos
-    and youtube_library with them.
+    Extract items (videos) from playlists.
+
+    Populate:
+    distinct_videos: dictionary with keys as identifiers and values as
+    lists with track info (title, author, description, duration_ms).
+    youtube_library: list of tuples mapping playlist ids to video ids.
     """
-    extract_videos_from_playlists(youtube, playlists)
-    extract_liked_videos(youtube)
-
-
-def extract_videos_from_playlists(youtube, playlists: dict[str, list[str]]) -> None:
     for playlist_id in playlists:
         response = get_playlist_items_page(youtube, playlist_id)
         populate_with_playlist_items_page(response, playlist_id)
@@ -120,6 +134,14 @@ def extract_videos_from_playlists(youtube, playlists: dict[str, list[str]]) -> N
 
 
 def extract_liked_videos(youtube) -> None:
+    """
+    Extract videos from `Liked videos`.
+
+    Populate:
+    distinct_videos: dictionary with keys as identifiers and values as
+    lists with track info (title, author, description, duration_ms).
+    youtube_library: list of tuples mapping playlist ids to video ids.
+    """
     response = get_liked_videos_page(youtube)
     populate_with_liked_videos_page(response)
 
@@ -180,7 +202,7 @@ def populate_with_playlist_items_page(response, playlist_id: str) -> None:
                 item["snippet"]["description"],
             ]
 
-            youtube_library.append([playlist_id, item["contentDetails"]["videoId"]])
+            youtube_library.append((playlist_id, item["contentDetails"]["videoId"]))
 
 
 def populate_with_liked_videos_page(response):
@@ -215,12 +237,13 @@ def populate_with_liked_videos_page(response):
             duration_ms,
         ]
 
-        youtube_library.append(["LM", item["id"]])
+        youtube_library.append(("LM", item["id"]))
 
 
-def split_to_50size_chunks(distinct_videos: dict[str, list[str]]) -> list[list[str]]:
+def split_to_50size_chunks(distinct_videos: dict | list) -> list[list[str]]:
     """
-    Split video ids into 50-size chunks.
+    Return a list of 50-size chunks (lists) from list or
+    dictionary keys.
     """
     chunks: list[list[str]] = []
     chunk: list[str] = []
@@ -237,9 +260,8 @@ def split_to_50size_chunks(distinct_videos: dict[str, list[str]]) -> list[list[s
 
 def add_duration_ms(youtube) -> None:
     """
-    Call videos().list for each chunk in the chunks list.
-    Extract duration, convert it to milliseconds and store it
-    in the distinct_videos.
+    Populate distinct_videos with duration in milliseconds for
+    each track.
     """
     chunks = split_to_50size_chunks(distinct_videos)
 
@@ -264,7 +286,7 @@ def add_duration_ms(youtube) -> None:
 
 def create_df_playlists(playlists: dict[str, list[str]]) -> pd.DataFrame:
     """
-    Return a playlist dataframe from a playlist dictionary.
+    Return a dataframe of playlists.
     """
     df_playlists = pd.DataFrame.from_dict(
         playlists, orient="index", columns=["type", "title", "author", "year"]
@@ -288,7 +310,7 @@ def create_df_playlists(playlists: dict[str, list[str]]) -> pd.DataFrame:
 
 def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
     """
-    Return a video dataframe from a video dictionary.
+    Return a dataframe of videos.
     """
     df_videos = pd.DataFrame.from_dict(
         distinct_videos,
@@ -305,9 +327,9 @@ def create_df_videos(distinct_videos: dict[str, list[str]]) -> pd.DataFrame:
     return df_videos
 
 
-def create_df_youtube_library(youtube_library: list[list[str]]) -> pd.DataFrame:
+def create_df_youtube_library(youtube_library: list[tuple[str]]) -> pd.DataFrame:
     """
-    Return a library dataframe from a youtube_library list.
+    Return a dataframe of playlists mapped to tracks.
     """
     df_youtube_library = pd.DataFrame(
         youtube_library, columns=["youtube_playlist_id", "video_id"]
@@ -340,28 +362,64 @@ def load_to_bigquery(
 
 
 def main():
+    """
+    Extract `Liked videos` and current user's playlists on YouTube
+    and load them into Google BigQuery using the YouTube Data API.
+    """
     begin = datetime.now()
-    credentials = get_valid_credentials()
+    credentials = get_valid_oauth_credentials()
     youtube = build("youtube", "v3", credentials=credentials)
 
     playlists = extract_user_playlists(youtube)
-    print(f"{len(playlists)} playlists were extracted.")
+    logger.info(f"{len(playlists)} playlists were extracted.")
 
-    df_playlists = create_df_playlists(playlists)
-    load_to_bigquery(df_playlists, "youtube_playlists")
-    print(f"youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows.")
+    if playlists:
+        df_playlists = create_df_playlists(playlists)
+        schema = [
+            bigquery.SchemaField(
+                "youtube_playlist_id", bigquery.enums.SqlTypeNames.STRING
+            ),
+            bigquery.SchemaField("type", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("title", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("author", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("year", bigquery.enums.SqlTypeNames.INT64),
+        ]
+        load_to_bigquery(df_playlists, "youtube_playlists", schema)
+        logger.info(
+            f"youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows."
+        )
 
-    extract_videos(youtube, playlists)
+        extract_playlist_items(youtube, playlists)
 
-    df_videos = create_df_videos(distinct_videos)
-    load_to_bigquery(df_videos, "youtube_videos")
-    print(f"youtube_videos uploaded to BigQuery, {len(df_videos)} rows.")
+    extract_liked_videos(youtube)
 
-    df_youtube_library = create_df_youtube_library(youtube_library)
-    load_to_bigquery(df_youtube_library, "youtube_library")
-    print(f"youtube_library uploaded to BigQuery, {len(df_youtube_library)} rows.")
+    if distinct_videos:
+        df_videos = create_df_videos(distinct_videos)
+        schema = [
+            bigquery.SchemaField("video_id", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("title", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("author", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("description", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("duration_ms", bigquery.enums.SqlTypeNames.INT64),
+        ]
+        load_to_bigquery(df_videos, "youtube_videos", schema)
+        logger.info(f"youtube_videos uploaded to BigQuery, {len(df_videos)} rows.")
+
+    if youtube_library:
+        df_youtube_library = create_df_youtube_library(youtube_library)
+        schema = [
+            bigquery.SchemaField("id", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField(
+                "youtube_playlist_id", bigquery.enums.SqlTypeNames.STRING
+            ),
+            bigquery.SchemaField("video_id", bigquery.enums.SqlTypeNames.STRING),
+        ]
+        load_to_bigquery(df_youtube_library, "youtube_library", schema)
+        logger.info(
+            f"youtube_library uploaded to BigQuery, {len(df_youtube_library)} rows."
+        )
     end = datetime.now()
-    print(end - begin)
+    logger.info(end - begin)
 
 
 if __name__ == "__main__":
