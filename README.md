@@ -43,7 +43,7 @@ I found these Spotify features useful for organising my music:
 This project uses channel names, video titles, descriptions and durations from YouTube. When working with this data, you should be aware of the following issues:
 - A video can be uploaded by any user, so the <b>channel name</b> may not be relevant.
 - A <b>track duration</b> may vary slightly between music platforms.
-- A <b>video title</b> may or may not include artists, track name or series/game.
+- A <b>video title</b> may or may not include artists, track name, series/game, number in the album or custom dividers.
 - An <b>album description</b> on YouTube usually includes track names, but the format may vary.
 - A track or album on Spotify may have two or more videos on YouTube. These duplicate videos may present in the liked videos or in a same playlist.
 - A video (track or album) can be saved in the different playlists.

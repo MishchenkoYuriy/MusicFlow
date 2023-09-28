@@ -11,6 +11,7 @@ from google.cloud import bigquery
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
+    filename="logs/spotify_elt.log",
 )
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,13 @@ def get_user_id(sp) -> str:
     return user_info["id"]
 
 
+def get_user_playlist_id(row, df_playlists: pd.DataFrame) -> str:
+    playlist = df_playlists[
+        df_playlists["youtube_playlist_id"] == row["youtube_playlist_id"]
+    ]
+    return playlist.iloc[0, 2]
+
+
 def create_user_playlists_from_df(row, sp, user_id) -> str:
     """
     Create private, non-collaborative Spotify playlists from the dataframe.
@@ -148,57 +156,73 @@ def create_user_playlists_from_df(row, sp, user_id) -> str:
 
 
 def fix_title(title: str) -> str:
-    # TODO title = re.sub('&', 'and', title)
-
+    """
+    Clean title for optimal search on Spotify.
+    """
     # Remove all brackets and the content inside
     # Examples: [Full Album], (Full EP), (2021), 【Complete】
-    title = re.sub(r"(\((.*?)\)|\[(.*?)\]|【(.*?)】)", "", title)
+    new_title = re.sub(r"(\((.*?)\)|\[(.*?)\]|【(.*?)】)", "", title)
+    # If there is nothing left of the title, undo the last step
+    if not new_title.strip():
+        new_title = title
+
+    # Remove dashes-dividers and the content inside
+    new_title = re.sub(r"( -)(.*?)(- )", " ", new_title)
+    if not new_title.strip():
+        new_title = title
 
     # Drop pipes (|)
-    title = re.sub("\|", "", title)
+    new_title = re.sub(r"\|", "", new_title)
+    if not new_title.strip():
+        new_title = title
 
-    return title
+    # Fix apostrophes
+    new_title = re.sub(r"‘", "'", new_title)
+    if not new_title.strip():
+        new_title = title
 
+    # Drop dashes (-) not between words, numbers, ets.
+    new_title = re.sub(r"\B-\B", "", new_title)
+    if not new_title.strip():
+        new_title = title
 
-def get_user_playlist_id(row, df_playlists: pd.DataFrame) -> str:
-    playlist = df_playlists[
-        df_playlists["youtube_playlist_id"] == row["youtube_playlist_id"]
-    ]
-    return playlist.iloc[0, 2]
+    # Drop the 'OST' word
+    new_title = re.sub(r"\bOST\b", " ", new_title)
+    if not new_title.strip():
+        new_title = title
+
+    return new_title
 
 
 def find_track(row, sp) -> dict:
-    step_counter = 0
-    # First try, depends on whether it is a Topic Channel
-    if " - Topic" in row["author"]:
-        artist = re.sub(" - Topic", "", row["author"])
-        artist = re.sub("'", " ", artist)
+    step_num = 0
+    is_ost = bool(re.search(r"\bOST\b", row["title"]))
+    artist = re.sub(" - Topic", "", row["author"])
+    fixed_title = fix_title(row["title"])
 
-        q = f'track:{row["title"]} artist:{artist}'
-        track_info, step_counter = qsearch_track(
-            row, sp, q=q, search_type_id=0, step_counter=step_counter, limit=2  # limit=1
-        )
+    q = f"track:{fixed_title} artist:{artist}"
+    track_info, step_num = qsearch_track(row, sp, q, 0, step_num, is_ost, limit=50)
 
-    else:
-        q = row["title"]
-        track_info, step_counter = qsearch_track(
-            row, sp, q=q, search_type_id=1, step_counter=step_counter, limit=2  # limit=1
-        )
-
-    # Second try, track + space + track name in quotes
     if not track_info:
+        q = fixed_title
+        track_info, step_num = qsearch_track(row, sp, q, 2, step_num, is_ost, limit=50)
+
+    if not track_info:
+        q = f'track "{fixed_title}"'
+        track_info, step_num = qsearch_track(row, sp, q, 4, step_num, is_ost, limit=50)
+
+    if not track_info:
+        q = f"{artist} {fixed_title}"
+        track_info, step_num = qsearch_track(row, sp, q, 6, step_num, is_ost, limit=50)
+
+    # Try with raw title if the title was changed
+    if not track_info and fixed_title != row["title"]:
         q = f'track "{row["title"]}"'
-        track_info, step_counter = qsearch_track(
-            row, sp, q=q, search_type_id=2, step_counter=step_counter, limit=2
-        )
+        track_info, step_num = qsearch_track(row, sp, q, 5, step_num, is_ost, limit=50)
 
-    # Third try, channel name + space + track title
-    if not track_info:
-        artist = re.sub(" - Topic", "", row["author"])
-        q = f'{artist} {row["title"]}'
-        track_info, step_counter = qsearch_track(
-            row, sp, q=q, search_type_id=3, step_counter=step_counter, limit=2
-        )
+    if not track_info and fixed_title != row["title"]:
+        q = row["title"]
+        track_info, step_num = qsearch_track(row, sp, q, 3, step_num, is_ost, limit=50)
 
     if not track_info:
         logger.info(f'Track "{row["title"]}" not found on Spotify')
@@ -206,30 +230,47 @@ def find_track(row, sp) -> dict:
 
 
 def qsearch_track(
-    row, sp, q: str, search_type_id: str, step_counter: int, limit: int
+    row, sp, q: str, search_type_id: str, step_num: int, is_ost: bool, limit: int
 ) -> (dict, int):
     tracks = sp.search(q=q, limit=limit, type="track")
 
-    for track in tracks["tracks"]["items"]:
-        # Increment step_counter only if tracks are found,
+    for i, track in enumerate(tracks["tracks"]["items"]):
+        # Break after the first loop
+        if i > 0:
+            break
+        # Increment step_num only if tracks are found,
         # a certain limit doesn't guarantee what tracks will be found.
-        step_counter += 1
-        artists, artists_in_title, track_in_title = [], 0, 0
+        step_num += 1
+        artists = []
+        artists_in_title = 0
+        artists_in_channel = 0
+        track_in_title = 0
+        if not track.get("duration_ms", 0):
+            logger.warning(f'The found track "{row["title"]}" '
+                           f'by {track["artists"][0]["name"]} '
+                           f"don't have a duration and was skipped")
+            break
         diff = abs(track["duration_ms"] - row["duration_ms"])
 
         for artist in track["artists"]:
             artists.append(artist["name"])
             if artist["name"].lower() in row["title"].lower():
                 artists_in_title += 1
+            if artist["name"].lower() in row["author"].lower():
+                artists_in_channel += 1
 
         if track["name"].lower() in row["title"].lower():
             track_in_title = 1
 
-        # Difference in 5 seconds or both track name and
-        # at least one artist presented in video title:
-        if diff <= 5000 or (track_in_title and artists_in_title):
+        # Track found if one of the following is true:
+        # - a track title in the video title AND
+        # (if not an OST) at least one artist in the video title or the channel name
+        # - difference in 5 seconds
+        if (
+            track_in_title and (is_ost or (artists_in_title or artists_in_channel))
+        ) or diff <= 5000:
             logger.info(
-                f'Track "{row["title"]}" found on try: {step_counter}, '
+                f'Track "{row["title"]}" found on try: {step_num}, '
                 f"difference: {round(diff / 1000)} seconds. "
             )
 
@@ -239,14 +280,14 @@ def qsearch_track(
                 "track_title": track["name"],
                 "track_artists": "; ".join(artist for artist in artists),
                 "duration_ms": track["duration_ms"],
-                "found_on_try": step_counter,
+                "found_on_try": step_num,
                 "difference_ms": abs(diff),
                 "track_match": 1,
                 "q": q,
                 "search_type_id": search_type_id,
-            }, step_counter
+            }, step_num
 
-    return dict(), step_counter
+    return dict(), step_num
 
 
 def collect_track(
@@ -310,58 +351,48 @@ def log_track(
 
 
 def find_album(row, sp) -> (dict, int):
-    step_counter = 0
+    step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    album_info, step_counter = qsearch_album(
-        row, sp, q=q, search_type_id=0, step_counter=step_counter, limit=1
-    )
+    album_info, step_num = qsearch_album(row, sp, q, 2, step_num, limit=1)
 
     if not album_info:
         q = f'album "{fixed_title}"'
-        album_info, step_counter = qsearch_album(
-            row, sp, q=q, search_type_id=1, step_counter=step_counter, limit=1
-        )
+        album_info, step_num = qsearch_album(row, sp, q, 4, step_num, limit=1)
 
-    # Try with raw title if title was changed
+    # Try with raw title if the title was changed
     if not album_info and fixed_title != row["title"]:
         q = row["title"]
-        album_info, step_counter = qsearch_album(
-            row, sp, q=q, search_type_id=2, step_counter=step_counter, limit=1
-        )
+        album_info, step_num = qsearch_album(row, sp, q, 3, step_num, limit=1)
 
-    return album_info, step_counter
+    return album_info, step_num
 
 
 def find_album_extended(row, sp) -> dict:
-    album_info, step_counter = find_album(row, sp)
+    album_info, step_num = find_album(row, sp)
 
     if not album_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        album_info, step_counter = qsearch_album(
-            row, sp, q=q, search_type_id=3, step_counter=step_counter, limit=1
-        )
+        album_info, step_num = qsearch_album(row, sp, q, 6, step_num, limit=1)
 
     if not album_info and row["year"]:
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        album_info, step_counter = qsearch_album(
-            row, sp, q=q, search_type_id=4, step_counter=step_counter, limit=1
-        )
+        album_info, step_num = qsearch_album(row, sp, q, 1, step_num, limit=1)
 
     return album_info
 
 
 def qsearch_album(
-    row, sp, q: str, search_type_id: str, step_counter: int, limit: int
+    row, sp, q: str, search_type_id: str, step_num: int, limit: int
 ) -> dict:
     max_diff = 40000
     albums = sp.search(q=q, limit=limit, type="album")
 
     for album in albums["albums"]["items"]:
-        # Increment step_counter only if albums are found,
+        # Increment step_num only if albums are found,
         # a certain limit doesn't guarantee what albums will be found.
-        step_counter += 1
+        step_num += 1
         tracks_uri: list[str] = []  # track uri
         tracks_info: list[
             tuple[str, str, int]
@@ -406,7 +437,7 @@ def qsearch_album(
             or (total_tracks >= 4 and match_percent >= 60)
         ):
             logger.info(
-                f'Album "{row["title"]}" found on try {step_counter}, '
+                f'Album "{row["title"]}" found on try {step_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
                 f"{track_match} of {total_tracks} track titles "
                 f"({round(match_percent)}%) found."
@@ -422,14 +453,14 @@ def qsearch_album(
                 ),
                 "duration_ms": album_length,
                 "total_tracks": total_tracks,
-                "found_on_try": step_counter,
+                "found_on_try": step_num,
                 "difference_ms": abs(diff),
                 "track_match": track_match,
                 "q": q,
                 "search_type_id": search_type_id,
-            }, step_counter
+            }, step_num
 
-    return dict(), step_counter
+    return dict(), step_num
 
 
 def collect_album(
@@ -503,58 +534,48 @@ def log_album(
 
 
 def find_other_playlist(row, sp) -> (dict, int):
-    step_counter = 0
+    step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    pl_info, step_counter = qsearch_playlist(
-        row, sp, q=q, search_type_id=0, step_counter=step_counter, limit=1
-    )
+    pl_info, step_num = qsearch_playlist(row, sp, q, 2, step_num, limit=1)
 
     if not pl_info:
         q = f'playlist "{fixed_title}"'
-        pl_info, step_counter = qsearch_playlist(
-            row, sp, q=q, search_type_id=1, step_counter=step_counter, limit=1
-        )
+        pl_info, step_num = qsearch_playlist(row, sp, q, 4, step_num, limit=1)
 
-    # Try with raw title if title was changed
+    # Try with raw title if the title was changed
     if not pl_info and fixed_title != row["title"]:
         q = row["title"]
-        pl_info, step_counter = qsearch_playlist(
-            row, sp, q=q, search_type_id=2, step_counter=step_counter, limit=1
-        )
+        pl_info, step_num = qsearch_playlist(row, sp, q, 3, step_num, limit=1)
 
-    return pl_info, step_counter
+    return pl_info, step_num
 
 
 def find_other_playlist_extended(row, sp) -> dict:
-    pl_info, step_counter = find_other_playlist(row, sp)
+    pl_info, step_num = find_other_playlist(row, sp)
 
     if not pl_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        pl_info, step_counter = qsearch_playlist(
-            row, sp, q=q, search_type_id=3, step_counter=step_counter, limit=1
-        )
+        pl_info, step_num = qsearch_playlist(row, sp, q, 6, step_num, limit=1)
 
     if not pl_info and row["year"]:
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        pl_info, step_counter = qsearch_playlist(
-            row, sp, q=q, search_type_id=4, step_counter=step_counter, limit=1
-        )
+        pl_info, step_num = qsearch_playlist(row, sp, q, 1, step_num, limit=1)
 
     return pl_info
 
 
 def qsearch_playlist(
-    row, sp, q: str, search_type_id: str, step_counter: int, limit: int
+    row, sp, q: str, search_type_id: str, step_num: int, limit: int
 ) -> (dict, int):
     max_diff = 40000
     playlists = sp.search(q=q, limit=limit, type="playlist")
 
     for playlist in playlists["playlists"]["items"]:
-        # Increment step_counter only if playlists are found,
+        # Increment step_num only if playlists are found,
         # a certain limit doesn't guarantee what playlists will be found.
-        step_counter += 1
+        step_num += 1
         tracks_uri: list[str] = []  # track uri
         tracks_info: list[
             tuple[str, str, int]
@@ -605,7 +626,7 @@ def qsearch_playlist(
         # video description (only if the total number of tracks is objective)
         if (abs(diff) < max_diff) or (total_tracks >= 4 and match_percent >= 60):
             logger.info(
-                f'Playlist "{row["title"]}" found on try {step_counter}, '
+                f'Playlist "{row["title"]}" found on try {step_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
                 f"{track_match} of {total_tracks} track titles "
                 f"({round(match_percent)}%) found."
@@ -620,14 +641,14 @@ def qsearch_playlist(
                 "playlist_owner": playlist["owner"]["display_name"],
                 "duration_ms": playlist_length,
                 "total_tracks": total_tracks,
-                "found_on_try": step_counter,
+                "found_on_try": step_num,
                 "difference_ms": abs(diff),
                 "track_match": track_match,
                 "q": q,
                 "search_type_id": search_type_id,
-            }, step_counter
+            }, step_num
 
-    return dict(), step_counter
+    return dict(), step_num
 
 
 def collect_other_playlist(
@@ -907,11 +928,13 @@ def create_df_spotify_log(
 
 def create_df_search_types() -> pd.DataFrame:
     search_types = {
-        0: "title (fixed)",
-        1: "keyword and title in quotes",
-        2: "title (raw)",
-        3: "author and title (fixed)",
-        4: "colons (year)",
+        0: "colons (title and artist)",
+        1: "colons (year)",
+        2: "title (fixed)",
+        3: "title (raw)",
+        4: "keyword and title in quotes (fixed)",
+        5: "keyword and title in quotes (raw)",
+        6: "artist and title (fixed)",
     }
 
     df_search_types = pd.DataFrame.from_dict(

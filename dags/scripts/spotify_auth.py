@@ -77,7 +77,7 @@ def auth_with_auth_manager(scope: list):
     if not scope:
         scope = ["user-library-modify", "playlist-modify-private"]
     sp = spotipy.Spotify(
-        auth_manager=SpotifyOAuth(scope=scope), requests_timeout=15, retries=5
+        auth_manager=SpotifyOAuth(scope=scope), requests_timeout=30, retries=5
     )
     return sp
 
@@ -100,7 +100,7 @@ def auth_with_refresh_token(refresh_token):
 
     response_json = response.json()
     access_token = response_json.get("access_token")
-    sp = spotipy.Spotify(auth=access_token, requests_timeout=15, retries=5)
+    sp = spotipy.Spotify(auth=access_token, requests_timeout=30, retries=5)
     return sp
 
 
