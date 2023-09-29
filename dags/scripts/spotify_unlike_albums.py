@@ -11,7 +11,6 @@ except:
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s",
-    filename="logs/clean_spotify.log",
 )
 logger = logging.getLogger(__name__)
 
