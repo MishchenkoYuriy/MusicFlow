@@ -94,7 +94,7 @@ def extract_videos() -> pd.DataFrame:
     """
     project_id = os.getenv("PROJECT_ID")
     your_channel_name = os.getenv("YOUR_CHANNEL_NAME")
-    threshold_ms = os.getenv("THRESHOLD_MS")
+    # threshold_ms = os.getenv("THRESHOLD_MS")
     client = bigquery.Client(project=project_id)
 
     sql = f"""
@@ -246,9 +246,11 @@ def qsearch_track(
         artists_in_channel = 0
         track_in_title = 0
         if not track.get("duration_ms", 0):
-            logger.warning(f'The found track "{row["title"]}" '
-                           f'by {track["artists"][0]["name"]} '
-                           f"don't have a duration and was skipped")
+            logger.warning(
+                f'The found track "{row["title"]}" '
+                f'by {track["artists"][0]["name"]} '
+                f"don't have a duration and was skipped"
+            )
             break
         diff = abs(track["duration_ms"] - row["duration_ms"])
 
@@ -350,42 +352,42 @@ def log_track(
     )
 
 
-def find_album(row, sp) -> (dict, int):
+def find_album(row, sp) -> (dict, int, list[int]):
     step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    album_info, step_num = qsearch_album(row, sp, q, 2, step_num, limit=1)
+    album_info, step_num, track_match = qsearch_album(row, sp, q, 2, step_num, 1)
 
     if not album_info:
         q = f'album "{fixed_title}"'
-        album_info, step_num = qsearch_album(row, sp, q, 4, step_num, limit=1)
+        album_info, step_num, track_match = qsearch_album(row, sp, q, 4, step_num, 1)
 
     # Try with raw title if the title was changed
     if not album_info and fixed_title != row["title"]:
         q = row["title"]
-        album_info, step_num = qsearch_album(row, sp, q, 3, step_num, limit=1)
+        album_info, step_num, track_match = qsearch_album(row, sp, q, 3, step_num, 1)
 
-    return album_info, step_num
+    return album_info, step_num, track_match
 
 
-def find_album_extended(row, sp) -> dict:
-    album_info, step_num = find_album(row, sp)
+def find_album_extended(row, sp) -> (dict, list[int]):
+    album_info, step_num, track_match = find_album(row, sp)
 
     if not album_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        album_info, step_num = qsearch_album(row, sp, q, 6, step_num, limit=1)
+        album_info, step_num, track_match = qsearch_album(row, sp, q, 6, step_num, 1)
 
     if not album_info and row["year"]:
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        album_info, step_num = qsearch_album(row, sp, q, 1, step_num, limit=1)
+        album_info, step_num, track_match = qsearch_album(row, sp, q, 1, step_num, 1)
 
-    return album_info
+    return album_info, track_match
 
 
 def qsearch_album(
     row, sp, q: str, search_type_id: str, step_num: int, limit: int
-) -> dict:
+) -> (dict, int, list[int]):
     max_diff = 40000
     albums = sp.search(q=q, limit=limit, type="album")
 
@@ -393,25 +395,46 @@ def qsearch_album(
         # Increment step_num only if albums are found,
         # a certain limit doesn't guarantee what albums will be found.
         step_num += 1
-        tracks_uri: list[str] = []  # track uri
-        tracks_info: list[
-            tuple[str, str, int]
-        ] = []  # (track uri, track title, track duration ms)
+        tracks_uri: list[str] = []
+        tracks_info: list[tuple[str, str, int]] = []
         diff = row["duration_ms"]
-        track_match = 0
         album_length = 0
 
-        tracks = sp.album(album["uri"])
-        for track in tracks["tracks"]["items"]:
+        track_match = []
+        track_match_cnt = 0
+        # Create a temp dictionary to get log_ids from track_titles
+        if "description" not in row.index:
+            d_temp = dict(zip(row["log_ids"], row["track_titles"]))
+
+        # Get album tracks
+        offset = 0
+        response = sp.album_tracks(album["uri"], limit=50, offset=0)
+        tracks = response["items"]
+
+        while response["next"]:
+            offset += 50
+            response = sp.album_tracks(album["uri"], limit=50, offset=offset)
+            tracks.extend(response["items"])
+
+        for track in tracks:
             # Extracted with YouTube Data API ("description" exists):
             if "description" in row.index:
                 if track["name"].lower() in row["description"].lower():
-                    track_match += 1
+                    track_match_cnt += 1
             # extracted with ytmusicapi ("track_titles" exists):
             else:
-                # if found track title like any track title in the YouTube album:
-                if [t for t in row["track_titles"] if track["name"].lower() in t]:
-                    track_match += 1
+                # Match YouTube and Spotify tracks in the album by title
+                try:
+                    match_id = next(
+                        key
+                        for key, val in d_temp.items()
+                        if track["name"].lower() in val
+                    )
+                    d_temp.pop(match_id)  # remove the found id
+                    track_match.append(match_id)  # save to found ids
+                    track_match_cnt += 1
+                except StopIteration:  # title not found
+                    pass
 
             tracks_uri.append(track["uri"])
             tracks_info.append((track["uri"], track["name"], track["duration_ms"]))
@@ -419,10 +442,12 @@ def qsearch_album(
             album_length += track["duration_ms"]
             diff -= track["duration_ms"]
 
+        # In case of a single album-video, we can only estimate
+        # the total number as the number of tracks in the Spotify album
         total_tracks = row.get("total_tracks", len(tracks_uri))
-        match_percent = (
-            track_match / total_tracks
-        ) * 100  # in case a albums are same with a difference in few tracks
+
+        # In case the albums are the same with a difference in few tracks
+        match_percent = (track_match_cnt / total_tracks) * 100
 
         # Album is considered found if one of three conditions is satisfied:
         # 1. Found title like YouTube title and artist like YouTube artist
@@ -439,28 +464,32 @@ def qsearch_album(
             logger.info(
                 f'Album "{row["title"]}" found on try {step_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
-                f"{track_match} of {total_tracks} track titles "
+                f"{track_match_cnt} of {total_tracks} track titles "
                 f"({round(match_percent)}%) found."
             )
 
-            return {
-                "album_uri": album["uri"],
-                "tracks_uri": tracks_uri,
-                "tracks_info": tracks_info,
-                "album_title": album["name"],
-                "album_artists": "; ".join(
-                    artist["name"] for artist in album["artists"]
-                ),
-                "duration_ms": album_length,
-                "total_tracks": total_tracks,
-                "found_on_try": step_num,
-                "difference_ms": abs(diff),
-                "track_match": track_match,
-                "q": q,
-                "search_type_id": search_type_id,
-            }, step_num
+            return (
+                {
+                    "album_uri": album["uri"],
+                    "tracks_uri": tracks_uri,
+                    "tracks_info": tracks_info,
+                    "album_title": album["name"],
+                    "album_artists": "; ".join(
+                        artist["name"] for artist in album["artists"]
+                    ),
+                    "duration_ms": album_length,
+                    "total_tracks": total_tracks,
+                    "found_on_try": step_num,
+                    "difference_ms": abs(diff),
+                    "track_match": track_match_cnt,
+                    "q": q,
+                    "search_type_id": search_type_id,
+                },
+                step_num,
+                track_match,
+            )
 
-    return dict(), step_num
+    return dict(), step_num, []
 
 
 def collect_album(
@@ -533,42 +562,42 @@ def log_album(
     )
 
 
-def find_other_playlist(row, sp) -> (dict, int):
+def find_other_playlist(row, sp) -> (dict, int, list[int]):
     step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    pl_info, step_num = qsearch_playlist(row, sp, q, 2, step_num, limit=1)
+    pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 2, step_num, 1)
 
     if not pl_info:
         q = f'playlist "{fixed_title}"'
-        pl_info, step_num = qsearch_playlist(row, sp, q, 4, step_num, limit=1)
+        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 4, step_num, 1)
 
     # Try with raw title if the title was changed
     if not pl_info and fixed_title != row["title"]:
         q = row["title"]
-        pl_info, step_num = qsearch_playlist(row, sp, q, 3, step_num, limit=1)
+        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 3, step_num, 1)
 
-    return pl_info, step_num
+    return pl_info, step_num, track_match
 
 
-def find_other_playlist_extended(row, sp) -> dict:
-    pl_info, step_num = find_other_playlist(row, sp)
+def find_other_playlist_extended(row, sp) -> (dict, list[int]):
+    pl_info, step_num, track_match = find_other_playlist(row, sp)
 
     if not pl_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        pl_info, step_num = qsearch_playlist(row, sp, q, 6, step_num, limit=1)
+        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 6, step_num, 1)
 
     if not pl_info and row["year"]:
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        pl_info, step_num = qsearch_playlist(row, sp, q, 1, step_num, limit=1)
+        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 1, step_num, 1)
 
-    return pl_info
+    return pl_info, track_match
 
 
 def qsearch_playlist(
     row, sp, q: str, search_type_id: str, step_num: int, limit: int
-) -> (dict, int):
+) -> (dict, int, list[int]):
     max_diff = 40000
     playlists = sp.search(q=q, limit=limit, type="playlist")
 
@@ -577,28 +606,52 @@ def qsearch_playlist(
         # a certain limit doesn't guarantee what playlists will be found.
         step_num += 1
         tracks_uri: list[str] = []  # track uri
-        tracks_info: list[
-            tuple[str, str, int]
-        ] = []  # (track uri, track title, track duration ms)
+        tracks_info: list[tuple[str, str, int]] = []
         diff = row["duration_ms"]
-        track_match = 0
         playlist_length = 0
 
-        tracks = sp.playlist(playlist["uri"])
-        for track in tracks["tracks"]["items"]:
+        track_match = []
+        track_match_cnt = 0
+        # Create a temp dictionary to get log_ids from track_titles
+        if "description" not in row.index:
+            d_temp = dict(zip(row["log_ids"], row["track_titles"]))
+
+        # Get playlist tracks
+        offset = 0
+        response = sp.playlist_items(
+            playlist["uri"], limit=100, offset=0, additional_types=("track",)
+        )
+        tracks = response["items"]
+
+        while response["next"]:
+            offset += 100
+            response = sp.playlist_items(
+                playlist["uri"], limit=100, offset=offset, additional_types=("track",)
+            )
+            tracks.extend(response["items"])
+
+        for track in tracks:
             artists = []
             if track.get("track", ""):
                 track_title = track["track"]["name"]
                 # Extracted with YouTube Data API ("description" exists):
                 if "description" in row.index:
                     if track_title.lower() in row["description"].lower():
-                        track_match += 1
-
+                        track_match_cnt += 1
                 # extracted with ytmusicapi ("track_titles" exists):
                 else:
-                    # if found track title like any track title in the YouTube album:
-                    if [t for t in row["track_titles"] if track_title.lower() in t]:
-                        track_match += 1
+                    # Match YouTube and Spotify tracks in the playlist by title
+                    try:
+                        match_id = next(
+                            key
+                            for key, val in d_temp.items()
+                            if track_title.lower() in val
+                        )
+                        d_temp.pop(match_id)  # remove the found id
+                        track_match.append(match_id)  # save to found ids
+                        track_match_cnt += 1
+                    except StopIteration:  # title not found
+                        pass
 
                 for artist in track["track"]["artists"]:
                     artists.append(artist["name"])
@@ -618,9 +671,9 @@ def qsearch_playlist(
                 diff -= track["track"]["duration_ms"]
 
         total_tracks = row.get("total_tracks", len(tracks_uri))
-        match_percent = (
-            track_match / total_tracks
-        ) * 100  # in case a playlist are same with a difference in few tracks
+
+        # In case a playlist are same with a difference in few tracks
+        match_percent = (track_match_cnt / total_tracks) * 100
 
         # Difference in 40 seconds or 60%+ tracks found in the YouTube
         # video description (only if the total number of tracks is objective)
@@ -628,27 +681,31 @@ def qsearch_playlist(
             logger.info(
                 f'Playlist "{row["title"]}" found on try {step_num}, '
                 f"difference: {round(diff / 1000)} seconds, "
-                f"{track_match} of {total_tracks} track titles "
+                f"{track_match_cnt} of {total_tracks} track titles "
                 f"({round(match_percent)}%) found."
             )
 
-            return {
-                "playlist_uri": playlist["uri"],
-                "playlist_id": playlist["id"],
-                "tracks_uri": tracks_uri,
-                "tracks_info": tracks_info,
-                "playlist_title": playlist["name"],
-                "playlist_owner": playlist["owner"]["display_name"],
-                "duration_ms": playlist_length,
-                "total_tracks": total_tracks,
-                "found_on_try": step_num,
-                "difference_ms": abs(diff),
-                "track_match": track_match,
-                "q": q,
-                "search_type_id": search_type_id,
-            }, step_num
+            return (
+                {
+                    "playlist_uri": playlist["uri"],
+                    "playlist_id": playlist["id"],
+                    "tracks_uri": tracks_uri,
+                    "tracks_info": tracks_info,
+                    "playlist_title": playlist["name"],
+                    "playlist_owner": playlist["owner"]["display_name"],
+                    "duration_ms": playlist_length,
+                    "total_tracks": total_tracks,
+                    "found_on_try": step_num,
+                    "difference_ms": abs(diff),
+                    "track_match": track_match_cnt,
+                    "q": q,
+                    "search_type_id": search_type_id,
+                },
+                step_num,
+                track_match,
+            )
 
-    return dict(), step_num
+    return dict(), step_num, []
 
 
 def collect_other_playlist(
@@ -730,14 +787,14 @@ def prepare_videos(
     if os.getenv("THRESHOLD_MS") and row["duration_ms"] >= int(
         os.getenv("THRESHOLD_MS")
     ):
-        album_info, _ = find_album(row, sp)
+        album_info, _, _ = find_album(row, sp)
         if album_info:
             status = collect_album(
                 album_info, user_playlist_id, row["title"], liked_albums_uri
             )
             log_album(album_info, user_playlist_id, row["log_id"], status)
         else:
-            playlist_info, _ = find_other_playlist(row, sp)
+            playlist_info, _, _ = find_other_playlist(row, sp)
             if playlist_info:
                 status = collect_other_playlist(
                     playlist_info, user_playlist_id, row["title"]
@@ -765,19 +822,21 @@ def prepare_playlists_others(row, sp, liked_albums_uri) -> None:
     Find albums, EPs and playlists of other users.
     """
     # if row["type"] == "Album" or row["type"] == "EP":  # TODO: research Spotify EPs
-    album_info = find_album_extended(row, sp)
+    album_info, track_match = find_album_extended(row, sp)
     if album_info:
         status = collect_album(album_info, "LM", row["title"], liked_albums_uri)
-        for log_id in row["log_ids"]:
+        # Log the found tracks
+        for log_id in track_match:
             log_album(album_info, None, log_id, status)
             # TODO album not found
 
     # elif row["type"] == "Playlist":
     else:
-        playlist_info = find_other_playlist_extended(row, sp)
+        playlist_info, track_match = find_other_playlist_extended(row, sp)
         if playlist_info:
             status = collect_other_playlist(playlist_info, "LM", row["title"])
-            for log_id in row["log_ids"]:
+            # Log the found tracks
+            for log_id in track_match:
                 log_other_playlist(playlist_info, None, log_id, status)
                 # TODO playlist not found
 
