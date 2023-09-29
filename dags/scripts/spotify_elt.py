@@ -284,7 +284,6 @@ def qsearch_track(
                 "duration_ms": track["duration_ms"],
                 "found_on_try": step_num,
                 "difference_ms": abs(diff),
-                "track_match": 1,
                 "q": q,
                 "search_type_id": search_type_id,
             }, step_num
@@ -344,7 +343,8 @@ def log_track(
             user_playlist_id,
             track_info["found_on_try"],
             track_info["difference_ms"],
-            track_info["track_match"],
+            1,  # pseudo track_match
+            1,  # pseudo total_tracks
             track_info["q"],
             track_info["search_type_id"],
             status,
@@ -478,7 +478,8 @@ def qsearch_album(
                         artist["name"] for artist in album["artists"]
                     ),
                     "duration_ms": album_length,
-                    "total_tracks": total_tracks,
+                    "total_tracks_spotify": len(tracks_uri),  # actual number of tracks
+                    "total_tracks_calculated": total_tracks,  # for the search only
                     "found_on_try": step_num,
                     "difference_ms": abs(diff),
                     "track_match": track_match_cnt,
@@ -530,7 +531,7 @@ def log_album(
         album_info["album_title"],
         album_info["album_artists"],
         album_info["duration_ms"],
-        album_info["total_tracks"],
+        album_info["total_tracks_spotify"],
     )
 
     for track_uri, title, duration_ms in album_info["tracks_info"]:
@@ -555,6 +556,7 @@ def log_album(
             album_info["found_on_try"],
             album_info["difference_ms"],
             album_info["track_match"],
+            album_info["total_tracks_calculated"],
             album_info["q"],
             album_info["search_type_id"],
             status,
@@ -694,7 +696,8 @@ def qsearch_playlist(
                     "playlist_title": playlist["name"],
                     "playlist_owner": playlist["owner"]["display_name"],
                     "duration_ms": playlist_length,
-                    "total_tracks": total_tracks,
+                    "total_tracks_spotify": len(tracks_uri),  # actual number of tracks
+                    "total_tracks_calculated": total_tracks,  # for the search only
                     "found_on_try": step_num,
                     "difference_ms": abs(diff),
                     "track_match": track_match_cnt,
@@ -743,7 +746,7 @@ def log_other_playlist(
         playlist_info["playlist_title"],
         playlist_info["playlist_owner"],
         playlist_info["duration_ms"],
-        playlist_info["total_tracks"],
+        playlist_info["total_tracks_spotify"],
     )
 
     for track_uri, title, artists, duration_ms, album_uri in playlist_info[
@@ -765,6 +768,7 @@ def log_other_playlist(
             playlist_info["found_on_try"],
             playlist_info["difference_ms"],
             playlist_info["track_match"],
+            playlist_info["total_tracks_calculated"],
             playlist_info["q"],
             playlist_info["search_type_id"],
             status,
@@ -963,6 +967,7 @@ def create_df_spotify_log(
         "found_on_try",
         "difference_ms",
         "track_match",
+        "total_tracks",
         "q",
         "search_type_id",
         "status",
@@ -1121,6 +1126,7 @@ def main():
             bigquery.SchemaField("found_on_try", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("difference_ms", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("track_match", bigquery.enums.SqlTypeNames.INT64),
+            bigquery.SchemaField("total_tracks", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("q", bigquery.enums.SqlTypeNames.STRING),
             bigquery.SchemaField("search_type_id", bigquery.enums.SqlTypeNames.INT64),
             bigquery.SchemaField("status", bigquery.enums.SqlTypeNames.STRING),
