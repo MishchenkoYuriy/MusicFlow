@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 
 import pandas as pd
+from google.cloud import bigquery
 from googleapiclient.discovery import build
 from ytmusicapi import YTMusic
 
@@ -252,7 +253,16 @@ def main():
 
     if playlists or albums:
         df_playlists = create_df_playlists(playlists, albums)
-        load_to_bigquery(df_playlists, "youtube_playlists")
+        schema = [
+            bigquery.SchemaField(
+                "youtube_playlist_id", bigquery.enums.SqlTypeNames.STRING
+            ),
+            bigquery.SchemaField("type", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("title", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("author", bigquery.enums.SqlTypeNames.STRING),
+            bigquery.SchemaField("year", bigquery.enums.SqlTypeNames.INT64),
+        ]
+        load_to_bigquery(df_playlists, "youtube_playlists", schema)
         logger.info(
             f"youtube_playlists uploaded to BigQuery, {len(df_playlists)} rows."
         )
