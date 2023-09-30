@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import re
@@ -5,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 
 import pandas as pd
+import redis
 from dotenv import load_dotenv
 from google.cloud import bigquery
 
@@ -60,27 +62,27 @@ def extract_other_playlists() -> pd.DataFrame:
 
     sql = f"""
     SELECT
-        ap.youtube_playlist_id,
-        ap.type,
-        ap.title,
-        ap.author,
-        ap.year,
-        count(av.video_id) as total_tracks,
-        array_agg(lower(av.title) order by al.id) as track_titles,
-        array_agg(al.id order by al.id) as log_ids,
-        sum(av.duration_ms) as duration_ms
+        yp.youtube_playlist_id,
+        yp.type,
+        yp.title,
+        yp.author,
+        yp.year,
+        count(yv.video_id) as total_tracks,
+        array_agg(lower(yv.title) order by yl.id) as track_titles,
+        array_agg(yl.id order by yl.id) as log_ids,
+        sum(yv.duration_ms) as duration_ms
     
-    FROM `{project_id}.marts.youtube_playlists` ap
+    FROM `{project_id}.marts.youtube_playlists` yp
 
-    INNER JOIN `{project_id}.marts.youtube_library` al
-    on ap.youtube_playlist_id = al.youtube_playlist_id
+    INNER JOIN `{project_id}.marts.youtube_library` yl
+    on yp.youtube_playlist_id = yl.youtube_playlist_id
 
-    INNER JOIN `{project_id}.marts.youtube_videos` av
-    on al.video_id = av.video_id
+    INNER JOIN `{project_id}.marts.youtube_videos` yv
+    on yl.video_id = yv.video_id
 
-    WHERE ap.author != '{your_channel_name}'
+    WHERE yp.author != '{your_channel_name}'
 
-    GROUP BY ap.youtube_playlist_id, ap.type, ap.title, ap.author, ap.year
+    GROUP BY yp.youtube_playlist_id, yp.type, yp.title, yp.author, yp.year
     """
 
     df_playlists_others = client.query(sql).to_dataframe()
@@ -101,6 +103,7 @@ def extract_videos() -> pd.DataFrame:
     SELECT
         yl.id as log_id,
         yl.youtube_playlist_id,
+        yl.video_id,
         
         yv.title,
         yv.author,
@@ -225,7 +228,7 @@ def find_track(row, sp) -> dict:
         track_info, step_num = qsearch_track(row, sp, q, 3, step_num, is_ost, limit=50)
 
     if not track_info:
-        logger.info(f'Track "{row["title"]}" not found on Spotify')
+        logger.info(f'Track "{row["title"]}" not found on Spotify.')
     return track_info
 
 
@@ -273,11 +276,11 @@ def qsearch_track(
         ) or diff <= 5000:
             logger.info(
                 f'Track "{row["title"]}" found on try: {step_num}, '
-                f"difference: {round(diff / 1000)} seconds. "
+                f"difference: {round(diff / 1000)} seconds."
             )
 
             return {
-                "track_uri": track["uri"],
+                "spotify_uri": track["uri"],
                 "album_uri": track["album"]["uri"],
                 "track_title": track["name"],
                 "track_artists": "; ".join(artist for artist in artists),
@@ -293,15 +296,15 @@ def qsearch_track(
 
 def collect_track(
     track_info: dict, user_playlist_id: str, video_title: str, liked_tracks_uri: list
-):
+) -> str:
     # search with primary key
-    if (track_info["track_uri"], user_playlist_id) in (
+    if (track_info["spotify_uri"], user_playlist_id) in (
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_tracks
     ):
         status = "skipped (saved during the run)"
         logger.warning(f'Track "{video_title}" skipped (saved during the run)')
 
-    elif track_info["track_uri"] in liked_tracks_uri and user_playlist_id == "LM":
+    elif track_info["spotify_uri"] in liked_tracks_uri and user_playlist_id == "LM":
         status = "skipped (saved before the run)"
         logger.warning(f'Track "{video_title}" skipped (saved before the run)')
 
@@ -309,12 +312,12 @@ def collect_track(
         status = "saved"
         if user_playlist_id != "LM":
             # Add the track to the playlist
-            if track_info["track_uri"] not in playlist_items[user_playlist_id]:
-                playlist_items[user_playlist_id].append(track_info["track_uri"])
+            if track_info["spotify_uri"] not in playlist_items[user_playlist_id]:
+                playlist_items[user_playlist_id].append(track_info["spotify_uri"])
 
         else:
             # Like the track
-            tracks_to_like.append(track_info["track_uri"])
+            tracks_to_like.append(track_info["spotify_uri"])
 
     return status
 
@@ -325,10 +328,10 @@ def log_track(
     # Add to distinct_tracks only if track_uri not in distinct_tracks or
     # playlist_uri is null (prevent losing playlist_uri):
     if (
-        not distinct_tracks.get(track_info["track_uri"])
-        or not distinct_tracks[track_info["track_uri"]][1]
+        not distinct_tracks.get(track_info["spotify_uri"])
+        or not distinct_tracks[track_info["spotify_uri"]][1]
     ):
-        distinct_tracks[track_info["track_uri"]] = (
+        distinct_tracks[track_info["spotify_uri"]] = (
             track_info["album_uri"],
             None,
             track_info["track_title"],
@@ -339,11 +342,11 @@ def log_track(
     log_tracks.append(
         (
             log_id,
-            track_info["track_uri"],
+            track_info["spotify_uri"],
             user_playlist_id,
             track_info["found_on_try"],
             track_info["difference_ms"],
-            1,  # pseudo track_match
+            1,  # pseudo track_match_cnt
             1,  # pseudo total_tracks
             track_info["q"],
             track_info["search_type_id"],
@@ -352,42 +355,42 @@ def log_track(
     )
 
 
-def find_album(row, sp) -> (dict, int, list[int]):
+def find_album(row, sp) -> (dict, int):
     step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    album_info, step_num, track_match = qsearch_album(row, sp, q, 2, step_num, 1)
+    album_info, step_num = qsearch_album(row, sp, q, 2, step_num, 1)
 
     if not album_info:
         q = f'album "{fixed_title}"'
-        album_info, step_num, track_match = qsearch_album(row, sp, q, 4, step_num, 1)
+        album_info, step_num = qsearch_album(row, sp, q, 4, step_num, 1)
 
     # Try with raw title if the title was changed
     if not album_info and fixed_title != row["title"]:
         q = row["title"]
-        album_info, step_num, track_match = qsearch_album(row, sp, q, 3, step_num, 1)
+        album_info, step_num = qsearch_album(row, sp, q, 3, step_num, 1)
 
-    return album_info, step_num, track_match
+    return album_info, step_num
 
 
-def find_album_extended(row, sp) -> (dict, list[int]):
-    album_info, step_num, track_match = find_album(row, sp)
+def find_album_extended(row, sp) -> dict:
+    album_info, step_num = find_album(row, sp)
 
     if not album_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        album_info, step_num, track_match = qsearch_album(row, sp, q, 6, step_num, 1)
+        album_info, step_num = qsearch_album(row, sp, q, 6, step_num, 1)
 
-    if not album_info and row["year"]:
+    if not album_info and not pd.isna(row["year"]):
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        album_info, step_num, track_match = qsearch_album(row, sp, q, 1, step_num, 1)
+        album_info, step_num = qsearch_album(row, sp, q, 1, step_num, 1)
 
-    return album_info, track_match
+    return album_info
 
 
 def qsearch_album(
     row, sp, q: str, search_type_id: str, step_num: int, limit: int
-) -> (dict, int, list[int]):
+) -> (dict, int):
     max_diff = 40000
     albums = sp.search(q=q, limit=limit, type="album")
 
@@ -402,9 +405,13 @@ def qsearch_album(
 
         track_match = []
         track_match_cnt = 0
-        # Create a temp dictionary to get log_ids from track_titles
+        
         if "description" not in row.index:
-            d_temp = dict(zip(row["log_ids"], row["track_titles"]))
+            # BigQuery array_agg create an array with numpy.int64 values,
+            # which are not JSON serializable, map to int to fix caching:
+            log_ids = list(map(int, row["log_ids"]))
+            # Create a temp dictionary to get log_ids from track_titles
+            d_temp = dict(zip(log_ids, row["track_titles"]))
 
         # Get album tracks
         offset = 0
@@ -470,7 +477,7 @@ def qsearch_album(
 
             return (
                 {
-                    "album_uri": album["uri"],
+                    "spotify_uri": album["uri"],
                     "tracks_uri": tracks_uri,
                     "tracks_info": tracks_info,
                     "album_title": album["name"],
@@ -479,31 +486,31 @@ def qsearch_album(
                     ),
                     "duration_ms": album_length,
                     "total_tracks_spotify": len(tracks_uri),  # actual number of tracks
-                    "total_tracks_calculated": total_tracks,  # for the search only
+                    "total_tracks_calc": total_tracks,  # for the search only
                     "found_on_try": step_num,
                     "difference_ms": abs(diff),
-                    "track_match": track_match_cnt,
+                    "track_match_cnt": track_match_cnt,
+                    "track_match": track_match,
                     "q": q,
                     "search_type_id": search_type_id,
                 },
                 step_num,
-                track_match,
             )
 
-    return dict(), step_num, []
+    return dict(), step_num
 
 
 def collect_album(
     album_info: dict, user_playlist_id: str, video_title: str, liked_albums_uri: list
-):
+) -> str:
     # search with primary key
-    if (album_info["album_uri"], user_playlist_id) in (
+    if (album_info["spotify_uri"], user_playlist_id) in (
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_albums
     ):
         status = "skipped (saved during the run)"
         logger.warning(f'Album "{video_title}" skipped (saved during the run)')
 
-    elif album_info["album_uri"] in liked_albums_uri and user_playlist_id == "LM":
+    elif album_info["spotify_uri"] in liked_albums_uri and user_playlist_id == "LM":
         status = "skipped (saved before the run)"
         logger.warning(f'Album "{video_title}" skipped (saved before the run)')
 
@@ -519,7 +526,7 @@ def collect_album(
 
         else:
             # Like the album
-            albums_to_like.append(album_info["album_uri"])
+            albums_to_like.append(album_info["spotify_uri"])
 
     return status
 
@@ -527,7 +534,7 @@ def collect_album(
 def log_album(
     album_info: dict, user_playlist_id: str, log_id: str, status: str
 ) -> None:
-    distinct_albums[album_info["album_uri"]] = (
+    distinct_albums[album_info["spotify_uri"]] = (
         album_info["album_title"],
         album_info["album_artists"],
         album_info["duration_ms"],
@@ -539,7 +546,7 @@ def log_album(
         # or playlist_uri is null (prevent losing playlist_uri)
         if not distinct_tracks.get(track_uri) or not distinct_tracks[track_uri][1]:
             distinct_tracks[track_uri] = (
-                album_info["album_uri"],
+                album_info["spotify_uri"],
                 None,
                 title,
                 # Same as album artists, not always correct,
@@ -551,12 +558,12 @@ def log_album(
     log_albums.append(
         (
             log_id,
-            album_info["album_uri"],
+            album_info["spotify_uri"],
             user_playlist_id,
             album_info["found_on_try"],
             album_info["difference_ms"],
-            album_info["track_match"],
-            album_info["total_tracks_calculated"],
+            album_info["track_match_cnt"],
+            album_info["total_tracks_calc"],
             album_info["q"],
             album_info["search_type_id"],
             status,
@@ -564,42 +571,42 @@ def log_album(
     )
 
 
-def find_other_playlist(row, sp) -> (dict, int, list[int]):
+def find_other_playlist(row, sp) -> (dict, int):
     step_num = 0
     fixed_title = fix_title(row["title"])
     q = fixed_title
-    pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 2, step_num, 1)
+    pl_info, step_num = qsearch_playlist(row, sp, q, 2, step_num, 1)
 
     if not pl_info:
         q = f'playlist "{fixed_title}"'
-        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 4, step_num, 1)
+        pl_info, step_num = qsearch_playlist(row, sp, q, 4, step_num, 1)
 
     # Try with raw title if the title was changed
     if not pl_info and fixed_title != row["title"]:
         q = row["title"]
-        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 3, step_num, 1)
+        pl_info, step_num = qsearch_playlist(row, sp, q, 3, step_num, 1)
 
-    return pl_info, step_num, track_match
+    return pl_info, step_num
 
 
-def find_other_playlist_extended(row, sp) -> (dict, list[int]):
-    pl_info, step_num, track_match = find_other_playlist(row, sp)
+def find_other_playlist_extended(row, sp) -> dict:
+    pl_info, step_num = find_other_playlist(row, sp)
 
     if not pl_info:
         fixed_title = fix_title(row["title"])
         q = f'{row["author"]} {fixed_title}'
-        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 6, step_num, 1)
+        pl_info, step_num = qsearch_playlist(row, sp, q, 6, step_num, 1)
 
-    if not pl_info and row["year"]:
+    if not pl_info and not pd.isna(row["year"]):
         q = f'{row["author"]} {fixed_title} year:{row["year"]}'
-        pl_info, step_num, track_match = qsearch_playlist(row, sp, q, 1, step_num, 1)
+        pl_info, step_num = qsearch_playlist(row, sp, q, 1, step_num, 1)
 
-    return pl_info, track_match
+    return pl_info
 
 
 def qsearch_playlist(
     row, sp, q: str, search_type_id: str, step_num: int, limit: int
-) -> (dict, int, list[int]):
+) -> (dict, int):
     max_diff = 40000
     playlists = sp.search(q=q, limit=limit, type="playlist")
 
@@ -614,9 +621,13 @@ def qsearch_playlist(
 
         track_match = []
         track_match_cnt = 0
-        # Create a temp dictionary to get log_ids from track_titles
+        
         if "description" not in row.index:
-            d_temp = dict(zip(row["log_ids"], row["track_titles"]))
+            # BigQuery array_agg create an array with numpy.int64 values,
+            # which are not JSON serializable, map to int to fix caching:
+            log_ids = list(map(int, row["log_ids"]))
+            # Create a temp dictionary to get log_ids from track_titles:
+            d_temp = dict(zip(log_ids, row["track_titles"]))
 
         # Get playlist tracks
         offset = 0
@@ -689,7 +700,7 @@ def qsearch_playlist(
 
             return (
                 {
-                    "playlist_uri": playlist["uri"],
+                    "spotify_uri": playlist["uri"],
                     "playlist_id": playlist["id"],
                     "tracks_uri": tracks_uri,
                     "tracks_info": tracks_info,
@@ -697,25 +708,25 @@ def qsearch_playlist(
                     "playlist_owner": playlist["owner"]["display_name"],
                     "duration_ms": playlist_length,
                     "total_tracks_spotify": len(tracks_uri),  # actual number of tracks
-                    "total_tracks_calculated": total_tracks,  # for the search only
+                    "total_tracks_calc": total_tracks,  # for the search only
                     "found_on_try": step_num,
                     "difference_ms": abs(diff),
-                    "track_match": track_match_cnt,
+                    "track_match_cnt": track_match_cnt,
+                    "track_match": track_match,
                     "q": q,
                     "search_type_id": search_type_id,
                 },
                 step_num,
-                track_match,
             )
 
-    return dict(), step_num, []
+    return dict(), step_num
 
 
 def collect_other_playlist(
     playlist_info: dict, user_playlist_id: str, video_title: str
-):
+) -> str:
     # search with primary key
-    if (playlist_info["playlist_uri"], user_playlist_id) not in (
+    if (playlist_info["spotify_uri"], user_playlist_id) not in (
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_playlists_others
     ):
         status = "saved"
@@ -742,7 +753,7 @@ def collect_other_playlist(
 def log_other_playlist(
     playlist_info: dict, user_playlist_id: str, log_id: str, status: str
 ) -> None:
-    distinct_playlists_others[playlist_info["playlist_uri"]] = (
+    distinct_playlists_others[playlist_info["spotify_uri"]] = (
         playlist_info["playlist_title"],
         playlist_info["playlist_owner"],
         playlist_info["duration_ms"],
@@ -754,7 +765,7 @@ def log_other_playlist(
     ]:
         distinct_tracks[track_uri] = (
             album_uri,
-            playlist_info["playlist_uri"],
+            playlist_info["spotify_uri"],
             title,
             "; ".join(artist for artist in artists),
             duration_ms,
@@ -763,12 +774,12 @@ def log_other_playlist(
     log_playlists_others.append(
         (
             log_id,
-            playlist_info["playlist_uri"],
+            playlist_info["spotify_uri"],
             user_playlist_id,
             playlist_info["found_on_try"],
             playlist_info["difference_ms"],
-            playlist_info["track_match"],
-            playlist_info["total_tracks_calculated"],
+            playlist_info["track_match_cnt"],
+            playlist_info["total_tracks_calc"],
             playlist_info["q"],
             playlist_info["search_type_id"],
             status,
@@ -777,7 +788,12 @@ def log_other_playlist(
 
 
 def prepare_videos(
-    row, sp, df_playlists: pd.DataFrame, liked_albums_uri: list, liked_tracks_uri: list
+    row,
+    sp,
+    redis_client,
+    df_playlists: pd.DataFrame,
+    liked_albums_uri: list,
+    liked_tracks_uri: list,
 ) -> None:
     """
     Find albums, playlists and tracks on Spotify,
@@ -785,20 +801,59 @@ def prepare_videos(
     """
     user_playlist_id = get_user_playlist_id(row, df_playlists)
 
+    cached_spotify = redis_client.get(row["video_id"])
+    if cached_spotify:
+        cached_spotify = json.loads(cached_spotify)
+
     # ALBUM OR PLAYLIST
     # THRESHOLD_MS is specified and
     # the duration of the video is greater than or equal to it
     if os.getenv("THRESHOLD_MS") and row["duration_ms"] >= int(
         os.getenv("THRESHOLD_MS")
     ):
-        album_info, _, _ = find_album(row, sp)
+        if cached_spotify and "spotify:album" in cached_spotify["spotify_uri"]:
+            album_info = cached_spotify
+            match_percent = (
+                album_info["track_match_cnt"] / album_info["total_tracks_calc"]
+            ) * 100
+            logger.info(
+                f'Album "{row["title"]}" found on try {album_info["found_on_try"]}, '
+                f'difference: {round(album_info["difference_ms"] / 1000)} seconds, '
+                f'{album_info["track_match_cnt"]} of '
+                f'{album_info["total_tracks_calc"]} track titles '
+                f"({round(match_percent)}%) found (from cache)."
+            )
+        else:
+            album_info, _ = find_album(row, sp)
+            if album_info:
+                redis_client.set(row["video_id"], json.dumps(album_info))
+
         if album_info:
             status = collect_album(
                 album_info, user_playlist_id, row["title"], liked_albums_uri
             )
             log_album(album_info, user_playlist_id, row["log_id"], status)
+
         else:
-            playlist_info, _, _ = find_other_playlist(row, sp)
+            if cached_spotify and "spotify:playlist" in cached_spotify["spotify_uri"]:
+                playlist_info = cached_spotify
+                match_percent = (
+                    playlist_info["track_match_cnt"]
+                    / playlist_info["total_tracks_calc"]
+                ) * 100
+                logger.info(
+                    f'Playlist "{row["title"]}" found on try '
+                    f'{playlist_info["found_on_try"]}, '
+                    f'difference: {round(playlist_info["difference_ms"] / 1000)} '
+                    f'seconds, {playlist_info["track_match_cnt"]} of '
+                    f'{playlist_info["total_tracks_calc"]} track titles '
+                    f"({round(match_percent)}%) found (from cache)."
+                )
+            else:
+                playlist_info, _ = find_other_playlist(row, sp)
+                if playlist_info:
+                    redis_client.set(row["video_id"], json.dumps(playlist_info))
+
             if playlist_info:
                 status = collect_other_playlist(
                     playlist_info, user_playlist_id, row["title"]
@@ -808,12 +863,24 @@ def prepare_videos(
                 )
 
             if not playlist_info:
-                logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify')
+                logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify.')
 
     # TRACK
-    # either THRESHOLD_MS is not specified or the duration of the video is less than it
+    # either THRESHOLD_MS is not specified
+    # or the duration of the video is less than it
     else:
-        track_info = find_track(row, sp)
+        if cached_spotify and "spotify:track" in cached_spotify["spotify_uri"]:
+            track_info = cached_spotify
+            logger.info(
+                f'Track "{row["title"]}" found on try: {track_info["found_on_try"]}, '
+                f'difference: {round(track_info["difference_ms"] / 1000)} seconds '
+                f"(from cache)."
+            )
+        else:
+            track_info = find_track(row, sp)
+            if track_info:
+                redis_client.set(row["video_id"], json.dumps(track_info))
+
         if track_info:
             status = collect_track(
                 track_info, user_playlist_id, row["title"], liked_tracks_uri
@@ -821,31 +888,68 @@ def prepare_videos(
             log_track(track_info, user_playlist_id, row["log_id"], status)
 
 
-def prepare_playlists_others(row, sp, liked_albums_uri) -> None:
+def prepare_playlists_others(row, sp, redis_client, liked_albums_uri) -> None:
     """
     Find albums, EPs and playlists of other users.
     """
+    cached_spotify = redis_client.get(row["youtube_playlist_id"])
+    if cached_spotify:
+        cached_spotify = json.loads(cached_spotify)
+
     # if row["type"] == "Album" or row["type"] == "EP":  # TODO: research Spotify EPs
-    album_info, track_match = find_album_extended(row, sp)
+    if cached_spotify and "spotify:album" in cached_spotify["spotify_uri"]:
+        album_info = cached_spotify
+        match_percent = (
+            album_info["track_match_cnt"] / album_info["total_tracks_calc"]
+        ) * 100
+        logger.info(
+            f'Album "{row["title"]}" found on try {album_info["found_on_try"]}, '
+            f'difference: {round(album_info["difference_ms"] / 1000)} seconds, '
+            f'{album_info["track_match_cnt"]} of '
+            f'{album_info["total_tracks_calc"]} track titles '
+            f"({round(match_percent)}%) found (from cache)."
+        )
+    else:
+        album_info = find_album_extended(row, sp)
+        if album_info:
+            redis_client.set(row["youtube_playlist_id"], json.dumps(album_info))
+
     if album_info:
         status = collect_album(album_info, "LM", row["title"], liked_albums_uri)
         # Log the found tracks
-        for log_id in track_match:
+        for log_id in album_info["track_match"]:
             log_album(album_info, None, log_id, status)
             # TODO album not found
 
     # elif row["type"] == "Playlist":
     else:
-        playlist_info, track_match = find_other_playlist_extended(row, sp)
+        if cached_spotify and "spotify:playlist" in cached_spotify["spotify_uri"]:
+            playlist_info = cached_spotify
+            match_percent = (
+                playlist_info["track_match_cnt"] / playlist_info["total_tracks_calc"]
+            ) * 100
+            logger.info(
+                f'Playlist "{row["title"]}" found on try '
+                f'{playlist_info["found_on_try"]}, '
+                f'difference: {round(playlist_info["difference_ms"] / 1000)} '
+                f'seconds, {playlist_info["track_match_cnt"]} of '
+                f'{playlist_info["total_tracks_calc"]} track titles '
+                f"({round(match_percent)}%) found (from cache)."
+            )
+        else:
+            playlist_info = find_other_playlist_extended(row, sp)
+            if playlist_info:
+                redis_client.set(row["youtube_playlist_id"], json.dumps(playlist_info))
+
         if playlist_info:
             status = collect_other_playlist(playlist_info, "LM", row["title"])
             # Log the found tracks
-            for log_id in track_match:
+            for log_id in playlist_info["track_match"]:
                 log_other_playlist(playlist_info, None, log_id, status)
                 # TODO playlist not found
 
         if not playlist_info:
-            logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify')
+            logger.info(f'Album/Playlist "{row["title"]}" not found on Spotify.')
 
 
 def like_albums(sp, albums_to_like: list[str]) -> None:
@@ -966,7 +1070,7 @@ def create_df_spotify_log(
         "user_playlist_id",
         "found_on_try",
         "difference_ms",
-        "track_match",
+        "track_match",  # track_match_cnt
         "total_tracks",
         "q",
         "search_type_id",
@@ -1030,6 +1134,8 @@ def main():
     df_videos = extract_videos()
     logger.info("Datasets have been extracted from BigQuery.")
 
+    redis_client = redis.Redis(host="localhost", port=6379, db=0)
+
     # Authorisation:
     from spotify_auth import auth_with_refresh_token
 
@@ -1068,11 +1174,11 @@ def main():
     df_videos.apply(
         prepare_videos,
         axis=1,
-        args=[sp, df_playlists, liked_albums_uri, liked_tracks_uri],
+        args=[sp, redis_client, df_playlists, liked_albums_uri, liked_tracks_uri],
     )
 
     df_playlists_others.apply(
-        prepare_playlists_others, axis=1, args=[sp, liked_albums_uri]
+        prepare_playlists_others, axis=1, args=[sp, redis_client, liked_albums_uri]
     )
 
     like_albums(sp, albums_to_like)
@@ -1140,6 +1246,8 @@ def main():
     logger.info("search_types uploaded to BigQuery.")
     end = datetime.now()
     logger.info(end - begin)
+    redis_client.flushall()
+    redis_client.close()
 
 
 if __name__ == "__main__":
