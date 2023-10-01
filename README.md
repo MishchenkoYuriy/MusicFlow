@@ -3,7 +3,7 @@
 </p>
 
 ## Project Description
-This project copies your music from YouTube to Spotify. It can extract your music directly from YouTube using the [official API](https://developers.google.com/youtube/v3) or from YouTube Music using [ytmusicapi](https://github.com/sigma67/ytmusicapi).
+This project copies your music from YouTube to Spotify. It can extract your music directly from YouTube using the [official API](https://developers.google.com/youtube/v3) or from YouTube Music using [ytmusicapi](https://github.com/sigma67/ytmusicapi). [Here](https://github.com/MishchenkoYuriy/MusicFlow#which-flow-to-choose) are the pros and cons of each.
 YouTube | | Spotify
 --- | --- | ---
 Tracks in Liked videos | &rarr; | 💚 Liked songs

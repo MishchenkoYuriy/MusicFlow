@@ -348,6 +348,11 @@ def load_to_bigquery(
     client = bigquery.Client(project=project_id)
     table_id = f"{project_id}.marts.{table_name}"
 
+    # Create marts dataset
+    dataset = bigquery.Dataset(f"{project_id}.marts")
+    dataset.location = "europe-west1"
+    client.create_dataset(dataset, exists_ok=True)
+
     if method == "replace":
         job_config = bigquery.LoadJobConfig(
             schema=schema, write_disposition="WRITE_TRUNCATE"

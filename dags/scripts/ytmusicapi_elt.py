@@ -99,7 +99,9 @@ def extract_playlist_items(
 
                 # Extract description for the search engine:
                 # (full description only available in YouTube Data API)
-                if duration_ms >= int(os.getenv("THRESHOLD_MS")):
+                if os.getenv("THRESHOLD_MS") and duration_ms >= int(
+                    os.getenv("THRESHOLD_MS")
+                ):
                     description = add_description(youtube, p_item["videoId"])
                 else:
                     description = ""
@@ -125,7 +127,9 @@ def extract_playlist_items(
 
                 # Extract description for the search engine:
                 # (full description only available in YouTube Data API)
-                if duration_ms >= int(os.getenv("THRESHOLD_MS")):
+                if os.getenv("THRESHOLD_MS") and duration_ms >= int(
+                    os.getenv("THRESHOLD_MS")
+                ):
                     description = add_description(youtube, p_item["videoId"])
                 else:
                     description = ""

@@ -7,7 +7,8 @@ from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 
 
 def print_auth_url(
-    scope: str = "user-library-modify,playlist-modify-private",
+    scope: str = "user-library-read,user-library-modify," \
+                 "playlist-read-private,playlist-modify-private,playlist-modify-public",
 ) -> None:
     """
     Print authentication URL.
@@ -109,5 +110,7 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    print_auth_url()
-    # get_refresh_token(os.getenv('AUTH_CODE'))
+    if not os.getenv("AUTH_CODE"):
+        print_auth_url()
+    else:
+        get_refresh_token(os.getenv("AUTH_CODE"))

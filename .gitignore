@@ -1,12 +1,9 @@
 *.ipynb
-reproduce.md
-reproduce_core.md
 dags/bigquery.py
-analysis/
 
 # airflow
 config/
-logs/
+logs/scheduler/
 plugins/
 raw_data/
 data/

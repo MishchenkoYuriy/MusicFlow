@@ -96,7 +96,6 @@ def extract_videos() -> pd.DataFrame:
     """
     project_id = os.getenv("PROJECT_ID")
     your_channel_name = os.getenv("YOUR_CHANNEL_NAME")
-    threshold_ms = os.getenv("THRESHOLD_MS")
     client = bigquery.Client(project=project_id)
 
     sql = f"""
@@ -119,10 +118,9 @@ def extract_videos() -> pd.DataFrame:
     ON yl.youtube_playlist_id = yp.youtube_playlist_id
 
     WHERE (yp.author = '{your_channel_name}' or yp.youtube_playlist_id = 'LM')
-    and yv.duration_ms >= {threshold_ms}
 
     ORDER BY yl.id
-    """  # WHERE yv.duration_ms < {threshold_ms}
+    """
 
     df_videos = client.query(sql).to_dataframe()
     return df_videos
