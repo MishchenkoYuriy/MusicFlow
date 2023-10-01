@@ -15,17 +15,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def populate_albums_uri(sp) -> list[str]:
+def populate_albums_uri(sp, remove_after=None) -> list[str]:
     """
     Return a list of liked albums URI for the current user.
     """
     albums_uri = []
-    remove_after = None
-
-    if os.getenv("REMOVE_AFTER"):
-        remove_after = datetime.strptime(os.getenv("REMOVE_AFTER"), "%Y-%m-%d %H:%M:%S")
-    else:
-        logger.warning("REMOVE_AFTER is not defined, removing all liked albums...")
+    if remove_after:
+        remove_after = datetime.strptime(remove_after, "%Y-%m-%d %H:%M:%S")
 
     liked_albums = sp.current_user_saved_albums()
     next_liked = liked_albums["next"]
@@ -67,7 +63,9 @@ def main(refresh_token):
     Remove liked albums on Spotify based on `REMOVE_AFTER`.
     """
     sp = auth_with_refresh_token(refresh_token)
-    albums_uri = populate_albums_uri(sp)
+    if not os.getenv("REMOVE_AFTER"):
+        logger.warning("REMOVE_AFTER is not defined, removing all liked albums...")
+    albums_uri = populate_albums_uri(sp, os.getenv("REMOVE_AFTER"))
     unlike_albums(sp, albums_uri)
 
 

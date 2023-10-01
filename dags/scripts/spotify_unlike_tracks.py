@@ -15,17 +15,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def populate_tracks_uri(sp) -> list[str]:
+def populate_tracks_uri(sp, remove_after=None) -> list[str]:
     """
     Return a list of liked tracks URI for the current user.
     """
     tracks_uri = []
-    remove_after = None
-
-    if os.getenv("REMOVE_AFTER"):
-        remove_after = datetime.strptime(os.getenv("REMOVE_AFTER"), "%Y-%m-%d %H:%M:%S")
-    else:
-        logger.warning("REMOVE_AFTER is not defined, removing all liked tracks...")
+    if remove_after:
+        remove_after = datetime.strptime(remove_after, "%Y-%m-%d %H:%M:%S")
 
     liked_tracks = sp.current_user_saved_tracks()
     next_liked = liked_tracks["next"]
@@ -67,7 +63,9 @@ def main(refresh_token):
     Clean `Liked songs` on Spotify based on `REMOVE_AFTER`.
     """
     sp = auth_with_refresh_token(refresh_token)
-    tracks_uri = populate_tracks_uri(sp)
+    if not os.getenv("REMOVE_AFTER"):
+        logger.warning("REMOVE_AFTER is not defined, removing all liked tracks...")
+    tracks_uri = populate_tracks_uri(sp, os.getenv("REMOVE_AFTER"))
     unlike_tracks(sp, tracks_uri)
 
 
