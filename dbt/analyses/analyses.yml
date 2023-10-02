@@ -21,3 +21,5 @@ analyses:
 
     - name: skipped_during_the_run
       description: '{{ doc("skipped_during_the_run") }}'
+    
+    - name: ratio_of_found_by_playlists

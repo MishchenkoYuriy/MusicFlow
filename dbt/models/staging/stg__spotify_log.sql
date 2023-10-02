@@ -12,6 +12,7 @@ final as (
         found_on_try,
         difference_ms,
         track_match,
+        total_tracks,
         q,
         search_type_id,
         status
