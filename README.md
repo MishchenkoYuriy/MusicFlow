@@ -3,31 +3,31 @@
 </p>
 
 ## Project Description
-This project copies your music from YouTube to Spotify.
+This project copies your music from YouTube to Spotify. It can extract your music directly from YouTube using the [official API](https://developers.google.com/youtube/v3) or from YouTube Music using [ytmusicapi](https://github.com/sigma67/ytmusicapi). [Here](https://github.com/MishchenkoYuriy/MusicFlow#which-flow-to-choose) are the pros and cons of each.
 YouTube | | Spotify
 --- | --- | ---
-Liked videos (tracks) | &rarr; | Liked songs
-Liked videos (albums) | &rarr; | Saved albums in your Library
-Liked videos (playlists) | &rarr; | Saved playlists in your Library
-Your playlists | &rarr; | Private*, non-collaborative playlists
+Tracks in Liked videos | &rarr; | 💚 Liked songs
+Albums in Liked videos | &rarr; | 💚 Albums in your Library
+Playlists in Liked videos | &rarr; | 💚 Playlists in your Library
+Your playlists | &rarr; | Private¹, non-collaborative playlists
+Other users' albums, EPs and playlists² | &rarr; | 💚 Albums, EPs and playlists in your Library
 
-\* Spotify playlists actually have three options: public (listed on your profile), public (not listed on your profile, but accessible via link) and private (not listed on your profile, not accessible via link). The Spotify API only provides options to create the first and second playlists. Once your playlists have been created you will see 'Public Playlist' above the playlist name, which means the second option. For more information, read this [thread](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).<br>
-You can manually make a playlist private by following these steps: Open the playlist, click the three dots icon (...) at the top of the playlist (or right-click the playlist), and select Make private.
+¹ There are three types of Spotify playlists: public (listed on your profile), public (not listed on your profile, but accessible via link) and private (not listed on your profile, not accessible via link). The Spotify API only provides options to create the first and second types. Once your playlists have been created you will see 'Public Playlist' above the playlist title, which means the second option. For more information, read this [thread](https://community.spotify.com/t5/Spotify-for-Developers/Api-to-create-a-private-playlist-doesn-t-work/td-p/5407807).<br>
+You can manually make a playlist private by following these steps: Open the playlist, click the three dots icon (...) at the top of the playlist (or right-click the playlist), and select `Make private`.
 
-❕ On YouTube albums and playlists can be presented as single long videos (usually unofficial) or as an a set of videos. This project does not copy the latter, which are created by other users and saved in your Library (YouTube Data API does not provide methods for working with the data).
+² For the ytmusicapi only. The YouTube Data API does not provide methods to work with this data.
 
 ## How to use it
 Follow these [instructions](reproduce.md).
 
 ## Problem Statement
-You may want to switch to Spotify (or at least back up your music data to Google BigQuery) for two reasons:
+You may want to switch to Spotify (or at least back up your music) for two reasons:
 1. <b>Organise your music library more efficiently.</b><br>
 I currently have 32 playlists and 550 liked music videos on YouTube, which adds up to 250 albums and 1000 tracks. From my experience of YouTube with [Enhancer](https://chrome.google.com/webstore/detail/enhancer-for-youtube/ponfpcnoihfmfllpaingbgckeeldkhle), at some point you need more options to structure your library. Creating a playlist on either YouTube Music or YouTube itself is slower than on Spotify. Spotify also wins when it comes to sorting and grouping.
 
 2. <b>Protect your music from becoming unavailable.</b><br>
 On YouTube anyone can upload their music and delete it just as easily. Today I have 80 deleted and 25 private videos, which is 10% of all my tracks. After a track is deleted or made private, you may not be able to retrieve any information to find what it was.<br>
-Some videos may not be available in your region (hidden songs in YouTube playlists or exclamation mark songs on YouTube Music), but you can still fetch them using the YouTube Data API and move to Spotify.
-
+Some videos may not be available in your region (hidden songs in YouTube playlists or exclamation mark songs on YouTube Music), but you can still fetch them using the YouTube Data API and copy to Spotify.
 
 ### Why Spotify?
 I found these Spotify features useful for organising my music:
@@ -43,16 +43,22 @@ I found these Spotify features useful for organising my music:
 This project uses channel names, video titles, descriptions and durations from YouTube. When working with this data, you should be aware of the following issues:
 - A video can be uploaded by any user, so the <b>channel name</b> may not be relevant.
 - A <b>track duration</b> may vary slightly between music platforms.
-- A <b>video title</b> may or may not include artists, track name or series/game.
+- A <b>video title</b> may or may not include artists, track name, series/game, number in the album or custom dividers.
 - An <b>album description</b> on YouTube usually includes track names, but the format may vary.
 - A track or album on Spotify may have two or more videos on YouTube. These duplicate videos may present in the liked videos or in a same playlist.
 - A video (track or album) can be saved in the different playlists.
 - Playlists can have the same name.
 
 ## How does it find music? Exploring the Search Engine
-The main problem is to find specific albums, playlists and tracks from the dirty YouTube videos. The first step to do that is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). The engine searches videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums and playlists. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If the treashold is not specified, the engine will search all videos as tracks.
+Let's say you're looking for a track, you probably won't blindly save the first position in your search. So we have a video, but how do we find the same track on Spotify? This is the main problem with this project.
 
-### Searching tracks
+The first step in finding albums, playlists and tracks from the dirty YouTube videos is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). The engine searches videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums and playlists. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If the threshold is not specified, the engine will search all videos as tracks.
+
+### Things to consider
+- The `limit` affects the result and doesn't just concatenate it
+- Special characters in titles
+
+### Searching Tracks
 1. If the video belongs to a [topic channel](https://support.google.com/youtube/answer/7636475?hl=en#zippy=%2Chow-does-youtube-decide-when-to-auto-generate-a-topic-channel-for-an-artist) (` - Topic` in the channel name), the title is probably a track name and the channel name (without ` - Topic`) is the name of an artist. The engine will use Spotify syntax as the strictest search:<br>
 `track:<video_title> artist:<channel_name>`
 2. If it's not a topic channel video, the engine will <b>instead</b> search for the video title:<br>
@@ -79,8 +85,13 @@ Why is the percentage so low? We probably want at least 90% of the tracks. My da
 ### Searching Playlists
 TODO
 
+### Which flow to choose?
+&nbsp; | Youtube Data API | ytmusicapi
+--- | --- | ---
+Support extraction of other users' albums, EPs and playlists | No | Yes
+Amount of extracted music | Wide, some extracted videos may not be music | Strict, some music may not be extracted, especially uploaded videos
 
-### Search disclaimer
+### Disclaimer
 This project may be bad to copy:
 - Classical music
 - Clips, live performances, covers, remixes and extended versions
