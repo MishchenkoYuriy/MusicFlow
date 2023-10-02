@@ -40,3 +40,8 @@ models:
     - dbt_utils.equal_rowcount:
         name: 'equal_rowcount: int_useful_youtube_library + stg__youtube_library'
         compare_model: ref('stg__youtube_library')
+    columns:
+      - name: estimated_type
+        tests:
+          - accepted_values:
+              values: ['Track', 'Album/Playlist']

@@ -10,6 +10,7 @@ final as (
 
         yp.youtube_playlist_id,
         yp.title as playlist_name,
+        yp.author as playlist_author,
 
         yv.video_id,
         yv.type,
@@ -17,6 +18,11 @@ final as (
         yv.author,
         yv.description,
         yv.duration_ms,
+
+        case
+        when yv.duration_ms < {{ env_var('DBT_THRESHOLD_MS') }} then 'Track'
+        when yv.duration_ms >= {{ env_var('DBT_THRESHOLD_MS') }} then 'Album/Playlist'
+        end as estimated_type
     
     from {{ ref('stg__youtube_library') }} yl
     inner join {{ ref('stg__youtube_playlists') }} yp on yl.youtube_playlist_id = yp.youtube_playlist_id
