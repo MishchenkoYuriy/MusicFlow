@@ -6,7 +6,7 @@ final as (
 
     select
         spotify_playlist_id,
-        playlist_name
+        title
     
     from {{ source('marts_sources', 'spotify_playlists') }}
 )

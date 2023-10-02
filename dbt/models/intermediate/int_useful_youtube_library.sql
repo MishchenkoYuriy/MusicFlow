@@ -9,11 +9,12 @@ final as (
         yl.id,
 
         yp.youtube_playlist_id,
-        yp.playlist_name,
+        yp.title as playlist_name,
 
         yv.video_id,
-        yv.youtube_title,
-        yv.youtube_channel,
+        yv.type,
+        yv.title,
+        yv.author,
         yv.description,
         yv.duration_ms,
     

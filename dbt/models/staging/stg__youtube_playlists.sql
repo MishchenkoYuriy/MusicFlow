@@ -6,7 +6,10 @@ final as (
 
     select
         youtube_playlist_id,
-        playlist_name
+        type,
+        title,
+        author,
+        year
     
     from {{ source('marts_sources', 'youtube_playlists') }}
 

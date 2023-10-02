@@ -13,7 +13,7 @@ models:
           - spotify_uri
           - user_playlist_id
         where:
-          "status = 'saved'"
+          "status = 'saved' and user_playlist_id is not null" # remove other users' albums and playlists
     columns:
       - name: spotify_type
         tests:

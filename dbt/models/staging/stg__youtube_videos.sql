@@ -6,8 +6,9 @@ final as (
 
     select
         video_id,
-        youtube_title,
-        youtube_channel,
+        type,
+        title,
+        author,
         description,
         duration_ms
     

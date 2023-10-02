@@ -11,7 +11,7 @@ final as (
         track_uri,
         found_on_try,
         difference_ms,
-        tracks_in_desc,
+        track_match,
         q,
         search_type_id,
         status

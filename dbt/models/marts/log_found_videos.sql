@@ -8,22 +8,22 @@ final as (
         video_id,
         user_playlist_id,
 
-        playlist_name,
+        user_playlist,
         spotify_uri,
         spotify_type as found,
 
         youtube_title,
-        youtube_channel,
+        youtube_author,
         description,
         spotify_title,
-        spotify_artists,
+        spotify_author,
 
         q,
         search_type_name as found_by,
-        found_on_try as loop_num,
+        found_on_try,
         status,
 
-        tracks_in_desc,
+        track_match,
         total_tracks,
         percentage_in_desc,
 
@@ -33,7 +33,7 @@ final as (
 
     from {{ ref('int_join_spotify_uris') }}
 
-    order by playlist_name, found, loop_num, found_by
+    order by user_playlist, found, found_on_try, found_by
     --order by difference_sec desc, found_by
 
 )

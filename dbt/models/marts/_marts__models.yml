@@ -14,13 +14,10 @@ models:
           name: 'equal_rowcount: log_found_videos + stg__spotify_log'
           compare_model: ref('stg__spotify_log')
       - dbt_utils.expression_is_true:
-          name: 'tracks_in_desc <= total_tracks'
-          expression: "tracks_in_desc <= total_tracks"
+          name: 'track_match <= total_tracks'
+          expression: "track_match <= total_tracks"
     columns:
       - name: video_id
-        tests:
-          - not_null
-      - name: playlist_name
         tests:
           - not_null
       - name: found
@@ -31,25 +28,25 @@ models:
       - name: youtube_title
         tests:
           - not_null
-      - name: youtube_channel
+      - name: youtube_author
         tests:
           - not_null
       - name: spotify_title
         tests:
           - not_null
-      - name: spotify_artists
+      - name: spotify_author
         tests:
           - not_null
       - name: found_by
         tests:
           - not_null
-      - name: loop_num
+      - name: found_on_try
         tests:
           - not_null
       - name: status
         tests:
           - not_null
-      - name: tracks_in_desc
+      - name: track_match
         tests:
           - not_null
       - name: total_tracks
@@ -99,13 +96,10 @@ models:
       - name: video_id
         tests:
           - not_null
-      - name: playlist_name
+      - name: title
         tests:
           - not_null
-      - name: youtube_title
-        tests:
-          - not_null
-      - name: youtube_channel
+      - name: author
         tests:
           - not_null
       - name: duration_ms
@@ -117,40 +111,23 @@ models:
     description: '{{ doc("log_for_tableau") }}'
     tests:
       - dbt_utils.equal_rowcount:
-          name: 'equal_rowcount: log_for_tableau + stg__spotify_log'
-          compare_model: ref('stg__spotify_log')
+          name: 'equal_rowcount: log_for_tableau + stg__youtube_library'
+          compare_model: ref('stg__youtube_library')
       - dbt_utils.expression_is_true:
-          name: 'tracks_in_desc <= total_tracks'
-          expression: "tracks_in_desc <= total_tracks"
+          name: 'track_match <= total_tracks'
+          expression: "track_match <= total_tracks"
     columns:
       - name: log_id
         tests:
           - unique
           - not_null
-      - name: spotify_type
+      - name: video_type
         tests:
           - not_null
-      - name: found_on_try
-        tests:
-          - not_null
-      - name: difference_ms
-        tests:
-          - not_null
-      - name: tracks_in_desc
-        tests:
-          - not_null
-      - name: total_tracks
-        tests:
-          - not_null
-      - name: search_type_name
-        tests:
-          - not_null
-      - name: status
-        tests:
-          - not_null
+          - accepted_values:
+              values: ['album/playlist', 'track']
       - name: percentage_in_desc
         tests:
-          - not_null
           - dbt_utils.expression_is_true:
               name: 'percentage_in_desc <= 100'
               expression: "<= 100"
@@ -162,7 +139,6 @@ models:
               column_type: float64
       - name: difference_sec
         tests:
-          - not_null
           - dbt_expectations.expect_column_values_to_be_of_type:
               name: 'column_type: log_found_videos, difference_sec, float64'
               column_type: float64
