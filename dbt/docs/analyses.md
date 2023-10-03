@@ -20,9 +20,15 @@ This analysis shows the YouTube channels and the number of their videos you have
 
 {% enddocs %}
 
-{% docs how_found_statistics %}
+{% docs found_by_statistics %}
 
-This analysis shows the steps the search engine takes to find an album, playlist or track on Spotify, and how many records were found on each.
+This analysis shows how many records were found by each query type.
+
+{% enddocs %}
+
+{% docs found_on_try_statistics %}
+
+This analysis shows how many records were found at each step.
 
 {% enddocs %}
 

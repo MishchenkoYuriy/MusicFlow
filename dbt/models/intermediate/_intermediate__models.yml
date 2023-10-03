@@ -11,14 +11,14 @@ models:
         name: 'unique_combination_of_columns: int_join_spotify_uris (exclude skipped)'
         combination_of_columns:
           - spotify_uri
-          - user_playlist_id
+          - spotify_playlist_id
         where:
-          "status = 'saved' and user_playlist_id is not null" # remove other users' albums and playlists
+          "status = 'saved' and spotify_playlist_id is not null" # remove other users' albums and playlists
     columns:
       - name: spotify_type
         tests:
           - accepted_values:
-              values: ['album', 'playlist', 'track']
+              values: ['Album', 'Playlist', 'Track']
       - name: spotify_uri
         tests:
           - dbt_expectations.expect_column_values_to_match_regex:

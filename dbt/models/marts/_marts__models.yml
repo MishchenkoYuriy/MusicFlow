@@ -9,22 +9,18 @@ models:
           name: 'unique_combination_of_columns: log_found_videos'
           combination_of_columns:
             - video_id
-            - user_playlist_id
-      - dbt_utils.equal_rowcount:
-          name: 'equal_rowcount: log_found_videos + stg__spotify_log'
-          compare_model: ref('stg__spotify_log')
+            - spotify_playlist_id
+          where:
+            "video_id is not null"
       - dbt_utils.expression_is_true:
           name: 'track_match <= total_tracks'
           expression: "track_match <= total_tracks"
     columns:
-      - name: video_id
-        tests:
-          - not_null
       - name: found
         tests:
           - not_null
           - accepted_values:
-              values: ['album', 'playlist', 'track']
+              values: ['Album', 'Playlist', 'Track']
       - name: youtube_title
         tests:
           - not_null

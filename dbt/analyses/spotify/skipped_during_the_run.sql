@@ -4,7 +4,7 @@ final as (
 
     select
         spotify_uri,
-        user_playlist_id,
+        spotify_playlist_id,
         user_playlist,
 
         spotify_title,
@@ -18,7 +18,9 @@ final as (
     
     from {{ ref('int_join_spotify_uris')}}
 
-    group by spotify_uri, user_playlist_id, user_playlist, spotify_type, spotify_title, spotify_author, spotify_duration, total_tracks
+    where spotify_playlist_id is not null -- remove other users' playlists
+
+    group by spotify_uri, spotify_playlist_id, user_playlist, spotify_type, spotify_title, spotify_author, spotify_duration, total_tracks
     having count(video_id) > 1
 
     order by user_playlist, spotify_uri

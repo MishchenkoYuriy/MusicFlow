@@ -10,7 +10,7 @@ total as (
 found as (
 
     select count(1) as found_cnt
-    from {{ ref('log_found_videos')}}
+    from {{ ref('int_join_spotify_uris')}}
 
 ),
 
