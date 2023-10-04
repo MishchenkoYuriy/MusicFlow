@@ -1,9 +1,9 @@
 <p align="center">
-<img src="images/spotify.png" width="600">
+<img src="images/MusicFlow.png" width="600">
 </p>
 
 ## Project Description
-This project copies your music from YouTube to Spotify. It can extract your music directly from YouTube using the [official API](https://developers.google.com/youtube/v3) or from YouTube Music using [ytmusicapi](https://github.com/sigma67/ytmusicapi). [Here](https://github.com/MishchenkoYuriy/MusicFlow#which-flow-to-choose) are the pros and cons of each.
+This project copies your music from YouTube or YouTube Music to Spotify. It can extract your music directly from YouTube using the [official API](https://developers.google.com/youtube/v3) or from YouTube Music using [ytmusicapi](https://github.com/sigma67/ytmusicapi). [Here](https://github.com/MishchenkoYuriy/MusicFlow#which-flow-to-choose) are the pros and cons of each.
 YouTube | | Spotify
 --- | --- | ---
 Tracks in Liked videos | &rarr; | 💚 Liked songs
@@ -30,6 +30,11 @@ On YouTube anyone can upload their music and delete it just as easily. Today I h
 Some videos may not be available in your region (hidden songs in YouTube playlists or exclamation mark songs on YouTube Music), but you can still fetch them using the YouTube Data API and copy to Spotify.
 
 ### Why Spotify?
+
+<p align="center">
+<img src="images/spotify.png" width="500">
+</p>
+
 I found these Spotify features useful for organising my music:
 - Nested folders
 - Drag and drop to create a playlist, add or remove a track from the playlist
@@ -49,51 +54,52 @@ This project uses channel names, video titles, descriptions and durations from Y
 - A video (track or album) can be saved in the different playlists.
 - Playlists can have the same name.
 
-## How does it find music? Exploring the Search Engine
-Let's say you're looking for a track, you probably won't blindly save the first position in your search. So we have a video, but how do we find the same track on Spotify? This is the main problem with this project.
+## How does it find music?
 
-The first step in finding albums, playlists and tracks from the dirty YouTube videos is to provide a threshold (`THRESHOLD_MS` variable in the `.env` file). The engine searches videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums and playlists. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If the threshold is not specified, the engine will search all videos as tracks.
+Check out the Tableau dashboard (TODO) for a quick introduction.
 
-### Things to consider
-- The `limit` affects the result and doesn't just concatenate it
-- Special characters in titles
+Looking for a track, you enter just enough information to find it, but still you probably won't blindly save the first position in the search results. So we have a video, but how do we find the same track on Spotify? That's the problem this project was created for.
+
+By providing a threshold (`THRESHOLD_MS` variable in the `.env` file) you tell to search videos with a duration less than the threshold as tracks, and those greater than or equal to the threshold as albums and playlists. For example, if you set `THRESHOLD_MS=720000`, a video that lasts for 11:59 will be recognised as a track. If no threshold is specified, all videos will be searched as tracks.
 
 ### Searching Tracks
-1. If the video belongs to a [topic channel](https://support.google.com/youtube/answer/7636475?hl=en#zippy=%2Chow-does-youtube-decide-when-to-auto-generate-a-topic-channel-for-an-artist) (` - Topic` in the channel name), the title is probably a track name and the channel name (without ` - Topic`) is the name of an artist. The engine will use Spotify syntax as the strictest search:<br>
-`track:<video_title> artist:<channel_name>`
-2. If it's not a topic channel video, the engine will <b>instead</b> search for the video title:<br>
-`<video_title>`
-3. In some cases (~8% on my data) the engine may not be able to find the track from the the topic channel video.<br>
-`track "<video_title>"`
-4. As a final option, the engine will concatenate the channel name and the video title.<br>
-`<channel_name> <video_title>`
+1. `track:<fixed_title> artist:<author>` — first, we remove special symbols (e.g. brackets, `|`, `:`, `-`) and redundant words (e.g. year, `OST`) from titles. We use [Spotify syntax](https://support.spotify.com/us/article/search/) as the strictest search. Note that quotes aren't necessary.
+2. `<fixed_title>` — the channel name may not be relevant (user-generated content).
+3. `track "<fixed_title>"` — alternative to the Spotify colons. Trying to say that we want a track in a softer way.
+4. `<author> <fixed_title>` — the author's name may not be exactly the same on Spotify, in which case we won't find the track on the first step.
+5. `track "<title>"` — in some cases important information may have been deleted, such as a track version. If the title has been changed in any way, we search with the raw title.
+6. `<title>`
 
-How does the search engine know a track has been found? It checks two conditions.
-1. The difference between the YouTube video and the track is less than or equal to 5 seconds.
-2. Both the title of the track and at least one of the artists are present in the video's title.
+Two conditions indicating that a track has been found:
+1. Both the title and at least one of the artists are present in the video's title.
+   - Caveat: On my data OSTs usually don't have artists in the titles. For them, matching title is enough.
+2. The difference between the YouTube video and the track is less than or equal to 5 seconds.
 
-### Searching Albums
-The first try: `<video_title>`<br>
-The second try: `album "<video_title>"`<br>
-If an album is not found, the engine will look for a playlist.
+### Searching Albums, EPs and Playlists
+We look for the album first.
 
-How does the search engine know an album has been found? It checks two conditions.
-1. The difference between the YouTube video and the album is less than or equal to 40 seconds.
-2. At least 70% of the album's tracks are present in the video's description (the album must contain 4 or more tracks to give an objective percentage).<br>
-Why is the percentage so low? We probably want at least 90% of the tracks. My data had spelling mistakes, extra prefixes and suffixes, extra or missing characters (usually spaces or brackets), slightly different translations or transcriptions. For example, `Part 1` instead of `Pt. 1`. In these cases 70% is optimal to eliminate few tracks.
+1. `<fixed_title>` — remove special symbols (e.g. brackets, `|`, `:`, `-`) and redundant words (e.g. year, `OST`, `Full Album`) from titles.
+2. `<title>` — in some cases important information may have been deleted. If the title has been changed in any way, we search with the raw title.
+3. `<author> <fixed_title>` — for other users' albums/playlists, we include the author in the search query.
 
-### Searching Playlists
-TODO
+If no album is found, we follow the same steps for the playlist.
+
+Three conditions indicating that an album or playlist has been found:
+1. The title on Spotify matches the title on YouTube, and the artist matches the channel name.
+2. The difference between the YouTube video and the album/playlist is less than or equal to 40 seconds.
+3. At least 60% of tracks found (the album/playlist must contain 4 or more tracks to give an objective percentage).
+   - Why is the percentage so low? We probably want at least 90% of the tracks. My data had spelling mistakes, extra prefixes and suffixes, extra or missing characters (usually spaces or brackets), slightly different translations or transcriptions. For example, `Part 1` instead of `Pt. 1`. In these cases 60% is optimal to eliminate few tracks.
 
 ### Which flow to choose?
 &nbsp; | Youtube Data API | ytmusicapi
 --- | --- | ---
 Support extraction of other users' albums, EPs and playlists | No | Yes
 Amount of extracted music | Wide, some extracted videos may not be music | Strict, some music may not be extracted, especially uploaded videos
+Your playlists | Extract all your playlists (you can manually exclude some of them) | Extract only playlists with at least one music video (no exclusion supported)
 
 ### Disclaimer
 This project may be bad to copy:
 - Classical music
 - Clips, live performances, covers, remixes and extended versions
 
-When the flow is finished, you can check how well the search engine has done by looking at the pre-made analyses in `dbt/analyses/` and views in `dbt/models/marts`. Read more about this in the dbt Docs.
+After the flow is finished, you can check what was found and what was not found by looking at the pre-made analyses in `dbt/analyses/` and views in `dbt/models/marts`. Read more about this in the dbt Docs.

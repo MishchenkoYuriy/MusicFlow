@@ -9,7 +9,7 @@
   pip install -r requirements.txt
   ```
 - Rename `.env.template` to `.env`
-- (Optional) Estimate the threshold based on your music, copy it to `.env` (`THRESHOLD_MS`). Learn more [here](https://github.com/MishchenkoYuriy/MusicFlow#how-does-it-find-music-exploring-the-search-engine).
+- (Optional) Estimate the threshold based on your music, copy it to `.env` (`THRESHOLD_MS`). Learn more [here](https://github.com/MishchenkoYuriy/MusicFlow#how-does-it-find-music).
 - (Optional) Copy the current time UTC+0 to `.env` (`REMOVE_AFTER`). Used to undo the flow (remove all albums, playlists and tracks created during the flow).
 
 
