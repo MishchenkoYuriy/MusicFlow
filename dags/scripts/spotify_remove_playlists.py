@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 
 try:
     from .spotify_auth import auth_with_refresh_token
@@ -20,18 +19,16 @@ def populate_playlist_ids(sp) -> list[str]:
     and liked other users' playlists.
     """
     playlist_ids = []
+    offset = 0
 
     playlists = sp.current_user_playlists()
-    next_playlists = playlists["next"]
 
     for playlist in playlists["items"]:
         playlist_ids.append(playlist["id"])
 
-    while next_playlists:
-        # extract offset from the url
-        offset = re.search("\d+", re.search("offset=\d+", next_playlists)[0])[0]
+    while playlists["next"]:
+        offset += 50
         playlists = sp.current_user_playlists(offset=offset)
-        next_playlists = playlists["next"]
 
         for playlist in playlists["items"]:
             playlist_ids.append(playlist["id"])
