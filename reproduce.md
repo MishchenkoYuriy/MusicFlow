@@ -99,7 +99,7 @@ Copy your music by running these commands:
   ```
 
 ### Last tips
-Don't like the result? You can easily remove all playlists, tracks and albums, specify `REMOVE_AFTER` variable in `.env` file in format `%Y-%m-%d %H:%M:%S`. If not specified, your entire Spotify library will be deleted! Caveat: `REMOVE_AFTER` doesn't affect playlists, i.e. all playlists will be removed (Spotify API doesn't support `added_at` field for playlists).
+Don't like the result? You can easily remove all playlists, tracks and albums, specify `REMOVE_AFTER` variable in `.env` file in format `%Y-%m-%d %H:%M:%S`. If not specified, your entire Spotify library will be deleted! Caveat: playlists are removed based on when the first track was added (Spotify API doesn't support `added_at` field for playlists).
 ```
 python dags/scripts/spotify_remove_playlists.py
 python dags/scripts/spotify_unlike_albums.py
