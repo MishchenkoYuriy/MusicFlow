@@ -56,7 +56,7 @@ This project uses channel names, video titles, descriptions and durations from Y
 
 ## How does it find music?
 
-Check out the Tableau dashboard (TODO) for a quick introduction.
+Check out the [Tableau dashboard](https://public.tableau.com/app/profile/yuriy.mishchenko/viz/MusicFlow/MusicFlow) for a quick introduction.
 
 Looking for a track, you enter just enough information to find it, but still you probably won't blindly save the first position in the search results. So we have a video, but how do we find the same track on Spotify? That's the problem this project was created for.
 
