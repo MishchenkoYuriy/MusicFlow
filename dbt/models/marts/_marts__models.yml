@@ -138,3 +138,6 @@ models:
           - dbt_expectations.expect_column_values_to_be_of_type:
               name: 'column_type: log_found_videos, difference_sec, float64'
               column_type: float64
+          - dbt_utils.expression_is_true:
+              name: 'difference_sec != 0'
+              expression: "!= 0"
