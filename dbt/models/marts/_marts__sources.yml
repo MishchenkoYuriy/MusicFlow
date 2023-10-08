@@ -1,0 +1,27 @@
+
+version: 2
+
+sources:
+  - name: marts_sources
+    schema: marts
+    tables:
+      - name: playlist_ids
+        description: '{{ doc("playlist_ids") }}'
+      - name: search_types
+        description: '{{ doc("search_types") }}'
+      - name: spotify_albums
+        description: '{{ doc("spotify_albums") }}'
+      - name: spotify_log
+        description: '{{ doc("spotify_log") }}'
+      - name: spotify_playlists
+        description: '{{ doc("spotify_playlists") }}'
+      - name: spotify_playlists_others
+        description: '{{ doc("spotify_playlists_others") }}'
+      - name: spotify_tracks
+        description: '{{ doc("spotify_tracks") }}'
+      - name: youtube_library
+        description: '{{ doc("youtube_library") }}'
+      - name: youtube_playlists
+        description: '{{ doc("youtube_playlists") }}'
+      - name: youtube_videos
+        description: '{{ doc("youtube_videos") }}'

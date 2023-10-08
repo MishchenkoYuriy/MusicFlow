@@ -1,0 +1,28 @@
+
+version: 2
+
+analyses:
+
+    # YouTube
+
+    - name: youtube_statistics
+      description: '{{ doc("youtube_statistics") }}'
+
+    - name: videos_saved_more_than_once
+      description: '{{ doc("videos_saved_more_than_once") }}'
+
+    - name: most_saved_channels
+      description: '{{ doc("most_saved_channels") }}'
+
+    # Spotify
+
+    - name: found_by_statistics
+      description: '{{ doc("found_by_statistics") }}'
+    
+    - name: found_on_try_statistics
+      description: '{{ doc("found_on_try_statistics") }}'
+
+    - name: skipped_during_the_run
+      description: '{{ doc("skipped_during_the_run") }}'
+    
+    - name: ratio_of_found_by_playlists

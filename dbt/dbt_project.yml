@@ -1,0 +1,36 @@
+
+name: 'music_flow'
+version: '1.0.0'
+config-version: 2
+
+
+profile: 'default'
+
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+docs-paths: ["docs"]
+
+
+target-path: "target"
+clean-targets:
+  - "target"
+
+
+models:
+  music_flow:
+    staging:
+      +materialized: view
+      +schema: staging
+    intermediate:
+      +materialized: ephemeral
+    marts:
+      +materialized: table
+      +schema: marts
+
+vars:
+  'dbt_date:time_zone': 'America/Los_Angeles'
