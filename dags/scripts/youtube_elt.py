@@ -92,14 +92,26 @@ def extract_user_playlists(youtube) -> dict[str, list[str]]:
     Return a dictionary with keys as identifiers
     and values as lists with playlist info (type, title, author, year).
     """
+    playlists: dict[str, list[str]] = {}
+    playlist_temp: list[dict] = []
+
     request = youtube.playlists().list(
         part="snippet,contentDetails", maxResults=50, mine=True
     )
     response = request.execute()
+    playlist_temp = response["items"]
 
-    playlists: dict[str, list[str]] = {}
+    while response.get("nextPageToken", ""):
+        request = youtube.playlists().list(
+            part="snippet,contentDetails",
+            maxResults=50,
+            mine=True,
+            pageToken=response["nextPageToken"],
+        )
+        response = request.execute()
+        playlist_temp.extend(response["items"])
 
-    for item in response["items"]:
+    for item in playlist_temp:
         if "💼" not in item["snippet"]["title"]:  # remove non-music playlists
             playlists[item["id"]] = [
                 "Playlist",
@@ -240,30 +252,14 @@ def populate_with_liked_videos_page(response):
         youtube_library.append(("LM", item["id"]))
 
 
-def split_to_50size_chunks(distinct_videos: dict | list) -> list[list[str]]:
-    """
-    Return a list of 50-size chunks (lists) from list or
-    dictionary keys.
-    """
-    chunks: list[list[str]] = []
-    chunk: list[str] = []
-
-    for ind, video_id in enumerate(distinct_videos):
-        if ind % 50 == 0 and chunk:  # not include the first empty chunk
-            chunks.append(chunk)
-            chunk = []
-        chunk.append(video_id)
-
-    chunks.append(chunk)  # append the last chunk
-    return chunks
-
-
 def add_duration_ms(youtube) -> None:
     """
     Populate distinct_videos with duration in milliseconds for
     each track.
     """
-    chunks = split_to_50size_chunks(distinct_videos)
+    chunks = [
+        list(distinct_videos)[i : i + 50] for i in range(0, len(distinct_videos), 50)
+    ]
 
     str_chunks: list[str] = [",".join(chunk) for chunk in chunks]
 

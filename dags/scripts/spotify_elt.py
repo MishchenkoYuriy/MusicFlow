@@ -924,7 +924,7 @@ def like_albums(sp, albums_to_like: list[str]) -> None:
     Like all album presented in the albums_to_like list. 50 albums per API call.
     """
     if albums_to_like:
-        chunks = split_to_50size_chunks(albums_to_like)
+        chunks = [albums_to_like[i : i + 50] for i in range(0, len(albums_to_like), 50)]
 
         for uris in chunks:
             sp.current_user_saved_albums_add(uris)
@@ -948,7 +948,7 @@ def like_tracks(sp, tracks_to_like: list[str]) -> None:
     Like all album presented in the tracks_to_like list. 50 tracks per API call.
     """
     if tracks_to_like:
-        chunks = split_to_50size_chunks(tracks_to_like)
+        chunks = [tracks_to_like[i : i + 50] for i in range(0, len(tracks_to_like), 50)]
 
         for uris in chunks:
             sp.current_user_saved_tracks_add(uris)
@@ -965,7 +965,7 @@ def populate_user_playlists(
     """
     if playlist_items:
         for user_playlist_id, tracks_uri in playlist_items.items():
-            chunks = split_to_50size_chunks(tracks_uri)
+            chunks = [tracks_uri[i : i + 50] for i in range(0, len(tracks_uri), 50)]
 
             for uris in chunks:
                 sp.playlist_add_items(user_playlist_id, uris)  # duplicates may arise
@@ -1106,12 +1106,6 @@ def main():
     # Authorisation:
     from spotify_auth import auth_with_refresh_token
 
-    # scope = ["user-library-read",
-    #          "user-library-modify",
-    #          "playlist-read-private",
-    #          "playlist-modify-private",
-    #          "playlist-modify-public"]
-    # sp = auth_with_auth_manager(scope)
     sp = auth_with_refresh_token(os.getenv("REFRESH_TOKEN"))
     user_id = get_user_id(sp)
 
@@ -1220,6 +1214,6 @@ def main():
 if __name__ == "__main__":
     from spotify_unlike_albums import populate_albums_uri
     from spotify_unlike_tracks import populate_tracks_uri
-    from youtube_elt import load_to_bigquery, split_to_50size_chunks
+    from youtube_elt import load_to_bigquery
 
     main()
