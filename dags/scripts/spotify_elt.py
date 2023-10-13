@@ -177,7 +177,7 @@ def fix_title(title: str) -> str:
     new_title = re.sub(r"\|", "", new_title)
     if not new_title.strip():
         new_title = title
-    
+
     # Drop colons
     new_title = re.sub(r":", " ", new_title)
     if not new_title.strip():
@@ -197,14 +197,14 @@ def fix_title(title: str) -> str:
     new_title = re.sub(r"\bOST\b", " ", new_title)
     if not new_title.strip():
         new_title = title
-    
+
     # Drop a year
-    new_title =  re.sub(r"\b(19|20)\d{2}\b", "", new_title)
+    new_title = re.sub(r"\b(19|20)\d{2}\b", "", new_title)
     if not new_title.strip():
         new_title = title
-    
+
     # Drop 'Full Album' (case-insensitive)
-    new_title =  re.sub(r"Full Album", "", new_title, flags=re.I)
+    new_title = re.sub(r"Full Album", "", new_title, flags=re.I)
     if not new_title.strip():
         new_title = title
 
@@ -312,15 +312,15 @@ def collect_track(
     track_info: dict, user_playlist_id: str, video_title: str, liked_tracks_uri: list
 ) -> str:
     # search with primary key
-    if (track_info["spotify_uri"], user_playlist_id) in (
+    if track_info["spotify_uri"] in liked_tracks_uri and user_playlist_id == "LM":
+        status = "skipped (saved before the run)"
+        logger.warning(f'Track "{video_title}" skipped (saved before the run)')
+
+    elif (track_info["spotify_uri"], user_playlist_id) in (
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_tracks
     ):
         status = "skipped (saved during the run)"
         logger.warning(f'Track "{video_title}" skipped (saved during the run)')
-
-    elif track_info["spotify_uri"] in liked_tracks_uri and user_playlist_id == "LM":
-        status = "skipped (saved before the run)"
-        logger.warning(f'Track "{video_title}" skipped (saved before the run)')
 
     else:
         status = "saved"
@@ -495,15 +495,15 @@ def collect_album(
     album_info: dict, user_playlist_id: str, video_title: str, liked_albums_uri: list
 ) -> str:
     # search with primary key
-    if (album_info["spotify_uri"], user_playlist_id) in (
+    if album_info["spotify_uri"] in liked_albums_uri and user_playlist_id == "LM":
+        status = "skipped (saved before the run)"
+        logger.warning(f'Album "{video_title}" skipped (saved before the run)')
+
+    elif (album_info["spotify_uri"], user_playlist_id) in (
         (uri, playlist_id) for _, uri, playlist_id, *_ in log_albums
     ):
         status = "skipped (saved during the run)"
         logger.warning(f'Album "{video_title}" skipped (saved during the run)')
-
-    elif album_info["spotify_uri"] in liked_albums_uri and user_playlist_id == "LM":
-        status = "skipped (saved before the run)"
-        logger.warning(f'Album "{video_title}" skipped (saved before the run)')
 
     else:
         status = "saved"
