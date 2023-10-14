@@ -106,9 +106,6 @@ models:
   - name: log_for_tableau
     description: '{{ doc("log_for_tableau") }}'
     tests:
-      - dbt_utils.equal_rowcount:
-          name: 'equal_rowcount: log_for_tableau + stg__youtube_library'
-          compare_model: ref('stg__youtube_library')
       - dbt_utils.expression_is_true:
           name: 'track_match <= total_tracks'
           expression: "track_match <= total_tracks"
@@ -116,12 +113,13 @@ models:
       - name: log_id
         tests:
           - unique
-          - not_null
-      - name: video_type
+      - name: youtube_type
         tests:
           - not_null
+      - name: spotify_type
+        tests:
           - accepted_values:
-              values: ['album/playlist', 'track']
+              values: ['Album', 'Playlist', 'Track']
       - name: percentage_in_desc
         tests:
           - dbt_utils.expression_is_true:

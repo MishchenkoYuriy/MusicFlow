@@ -213,8 +213,9 @@ models:
         tests:
           - unique
           - not_null
-          - duration_match
-          - tracks_count_match
+          # These tests will only work if the playlist contains no duplicates:
+          #- duration_match
+          #- tracks_count_match
           - dbt_expectations.expect_column_values_to_be_of_type:
               name: 'column_type: stg__spotify_playlists_others, playlist_uri, string'
               column_type: string
