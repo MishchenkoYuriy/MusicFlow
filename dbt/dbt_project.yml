@@ -31,6 +31,9 @@ models:
     marts:
       +materialized: table
       +schema: marts
+    +persist_docs:
+      relation: true
+      columns: true
 
 vars:
   'dbt_date:time_zone': 'America/Los_Angeles'
